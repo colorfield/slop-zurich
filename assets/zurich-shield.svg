@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 72" role="img" aria-label="Zürich shield">
-  <defs><clipPath id="s"><path d="M4 4h56v34c0 16-12 26-28 30C16 64 4 54 4 38z"/></clipPath></defs>
-  <g clip-path="url(#s)">
-    <rect width="64" height="72" fill="#ffffff"/>
-    <path d="M4 4L60 68H0z" fill="#0f5cad"/>
-  </g>
-  <path d="M4 4h56v34c0 16-12 26-28 30C16 64 4 54 4 38z" fill="none" stroke="#0b2f57" stroke-width="2.5"/>
-</svg>
