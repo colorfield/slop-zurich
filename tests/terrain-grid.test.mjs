@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { gridHeight, gridNormal, subdivideTriangles } from '../js/terrain-grid.js';
+import { gridHeight, gridNormal, subdivideTriangles, fillCuts } from '../js/terrain-grid.js';
 
 // A small rough grid: 9 x 7 nodes, 4 m cells, pseudo-random heights with a quay-like step
 const cols = 9, rows = 7, cell = 4;
@@ -54,4 +54,19 @@ test('subdivision bounds the edges, keeps the area and the winding, and carries 
     const x = weights[v * 3] * tris[s] + weights[v * 3 + 1] * tris[s + 3] + weights[v * 3 + 2] * tris[s + 6];
     assert.ok(Math.abs(x - positions[v * 3]) < 1e-4);
   }
+});
+
+test('fillCuts raises the trench leading to a seed, not the hollows beyond it nor the skipped ground', () => {
+  // 40 x 20 nodes, 4 m cells, level at 5 m. A street runs along z = 40 from x = 0 to 156: a 3 m trench from x = 8 to
+  // 72 (the seed, a tunnel mouth, at x = 72), another hollow from x = 104 to 132; the trench's far end (x = 8) is skipped.
+  const g = { cols: 40, rows: 20, cell: 4, minX: 0, minZ: 0, heights: new Float32Array(800).fill(5) };
+  const node = (x, z) => (z / 4) * 40 + x / 4;
+  for (let x = 8; x <= 132; x += 4) for (const z of [36, 40, 44]) if (x <= 72 || x >= 104) g.heights[node(x, z)] = 2;
+  const before = Float32Array.from(g.heights);
+  const n = fillCuts(g, [{ pts: [0, 40, 156, 40], half: 6 }], { seeds: [{ x: 72, z: 40, r: 6 }], skip: (x) => x === 8 });
+  assert.ok(n > 0);
+  for (let x = 16; x <= 68; x += 4) assert.ok(g.heights[node(x, 40)] > 4, `trench at x = ${x}: ${g.heights[node(x, 40)]}`);
+  assert.equal(g.heights[node(8, 40)], 2, 'skipped node');
+  for (let x = 104; x <= 132; x += 4) assert.equal(g.heights[node(x, 40)], 2, `hollow beyond the trench at x = ${x}`);
+  for (let k = 0; k < before.length; k++) assert.ok(g.heights[k] >= before[k], 'only raises');
 });

@@ -79,6 +79,27 @@ test('one stands on a bridge over the water, never under it; under the Hardbrüc
   assert.equal(surfaceHeight(hard.x, hard.z, hard.d), hard.d, 'on the Hardbrücke');
 });
 
+test('the ramps to the Ulmbergtunnel stay level with the street; the Rämistrasse keeps its cutting', async () => {
+  const { groundHeight } = await import('../js/terrain.js');
+  // How deep the street's points lie under the median of the ground 14-20 m around them
+  const trench = (r, ground) => {
+    let deepest = 0;
+    for (let i = 0; i < r.pts.length; i += 2) {
+      const x = r.pts[i], z = r.pts[i + 1], ring = [];
+      for (let a = 0; a < 24; a++) for (const d of [14, 20]) ring.push(ground(x + d * Math.cos((a * Math.PI) / 12), z + d * Math.sin((a * Math.PI) / 12)));
+      ring.sort((p, q) => p - q);
+      deepest = Math.max(deepest, ring[ring.length >> 1] - ground(x, z));
+    }
+    return deepest;
+  };
+  const survey = (x, z) => gridHeight(TERRAIN, x, z);
+  const ramps = ZURICH_DATA.roads.filter((r) => r.name === 'Tunnelstrasse' && !r.tunnel);
+  assert.ok(Math.max(...ramps.map((r) => trench(r, survey))) > 3, 'the survey has the trenches');
+  for (const r of ramps) assert.ok(trench(r, groundHeight) < 1, `${r.id} ${trench(r, groundHeight).toFixed(1)} m under the ground around it`);
+  const rami = ZURICH_DATA.roads.filter((q) => q.name === 'Rämistrasse');
+  assert.ok(Math.max(...rami.map((r) => trench(r, groundHeight))) > 3, 'the Rämistrasse in its cutting');
+});
+
 test('the city keeps its landmarks, quarters, trees and road graph', () => {
   for (const name of ['Grossmünster', 'Fraumünster', 'Zürich HB', 'ETH Hauptgebäude', 'Opernhaus', 'Prime Tower']) {
     assert.ok(ZURICH_DATA.landmarks[name], name);

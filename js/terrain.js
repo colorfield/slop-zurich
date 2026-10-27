@@ -1,10 +1,10 @@
 import * as THREE from 'three/webgpu';
-import { parseTerrain, gridHeight, gridNormal, subdivideTriangles } from './terrain-grid.js';
+import { parseTerrain, gridHeight, gridNormal, subdivideTriangles, fillCuts } from './terrain-grid.js';
 import { ZURICH_DATA } from './zurich-geodata.js';
 
 // Zurich's relief for the engine (which was written for a flat Manhattan at y = 0).
-//  - groundHeight(x, z): the bare-earth surface (swissALTI3D, data/zurich-terrain.bin), exactly as the terrain mesh
-//    draws it (see terrain-grid.js).
+//  - groundHeight(x, z): the bare-earth surface (swissALTI3D, data/zurich-terrain.bin, with the bridgeheads raised and
+//    the tunnel ramps filled below), exactly as the terrain mesh draws it (see terrain-grid.js).
 //  - deckHeight(x, z): the surveyed deck of the bridge under (x, z) (tools/build-zurich-geodata.mjs, roads[].ys), or NaN.
 //  - surfaceHeight(x, z, nearY): what an actor at height ~nearY stands on: the deck when on a bridge, unless it is
 //    clearly passing underneath on land (the Hardbrücke spans streets and the tracks; there is no going under a bridge
@@ -111,6 +111,56 @@ export function surfaceHeight(x, z, nearY) {
   if (!(d === d)) return g;
   if (nearY === undefined || d - g < 2) return d > g ? d : g;
   return Math.abs(nearY - d) <= Math.abs(nearY - g) || inWater(x, z) ? d : g;
+}
+
+// --- Tunnel approaches: the ramps down to the road tunnels' mouths are filled to the street ------------------------------
+// The engine has no underground: the tunnels are not drawn and their mouths are filled by the data tool, but the open
+// ramps leading down to them stay in the bare-earth survey as trenches between retaining walls, which the 4 m grid
+// turns into lumpy slopes (the Ulmbergtunnel's ramps on the Tunnelstrasse, the Letten tunnel's on the
+// Wasserwerkstrasse). The trench along the streets within APPROACH m of a road tunnel's mouth, from the mouth on, is
+// filled from the ground around it (terrain-grid.js fillCuts), so the street stays level and ends at the hill. Only the
+// drivable streets lead there: real cuttings (the Rämistrasse under the Hohe Promenade, the Seebahn's trench) stay.
+{
+  const APPROACH = 150;
+  const DRIVABLE = /^(motorway|trunk|primary|secondary|tertiary)(_link)?$|^(residential|unclassified|living_street)$/;
+  const streets = ZURICH_DATA.roads.filter((r) => DRIVABLE.test(r.kind));
+  const key = (x, z) => `${Math.round(x * 10)},${Math.round(z * 10)}`;
+  const at = new Map(); // point -> [street, point index] of the open streets through it
+  for (const r of streets) {
+    if (r.tunnel || r.bridge) continue;
+    for (let i = 0; i < r.pts.length; i += 2) {
+      const k = key(r.pts[i], r.pts[i + 1]);
+      if (!at.has(k)) at.set(k, []);
+      at.get(k).push([r, i / 2]);
+    }
+  }
+  // Mouths: tunnel ends where an open street continues. Walk the open streets from them, up to APPROACH m away.
+  const seeds = [], queue = [], left = new Map(), reached = new Map();
+  for (const r of streets) {
+    if (!r.tunnel) continue;
+    for (const i of [0, r.pts.length - 2]) {
+      const k = key(r.pts[i], r.pts[i + 1]);
+      if (at.has(k)) { seeds.push({ x: r.pts[i], z: r.pts[i + 1], r: 12 }); queue.push([k, APPROACH]); }
+    }
+  }
+  while (queue.length) {
+    const [k, budget] = queue.pop();
+    for (const [r, i] of at.get(k)) {
+      for (const step of [-1, 1]) {
+        let b = budget;
+        for (let j = i; b > 0 && j + step >= 0 && j + step < r.pts.length / 2; j += step) {
+          if (!reached.has(r)) reached.set(r, new Set());
+          reached.get(r).add(Math.min(j, j + step));
+          b -= Math.hypot(r.pts[(j + step) * 2] - r.pts[j * 2], r.pts[(j + step) * 2 + 1] - r.pts[j * 2 + 1]);
+          const nk = key(r.pts[(j + step) * 2], r.pts[(j + step) * 2 + 1]);
+          if (b > 0 && (left.get(nk) ?? 0) < b) { left.set(nk, b); queue.push([nk, b]); }
+        }
+      }
+    }
+  }
+  const corridors = [];
+  for (const [r, segments] of reached) for (const s of segments) corridors.push({ pts: r.pts.slice(s * 2, s * 2 + 4), half: r.width / 2 + 3 });
+  fillCuts(TERRAIN, corridors, { seeds, skip: (x, z) => inWater(x, z) || deckHeight(x, z) === deckHeight(x, z) });
 }
 
 // --- Water level: the river and lake surfaces are the lowest ground within ~12 m (banks and quays rise above) --------
