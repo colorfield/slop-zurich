@@ -419,29 +419,63 @@ function buildRoadNetwork(sidewalks, obstacles, signalIntersections = []) {
       const each = half >= 8.5 ? [1.8, 5.4] : [1.8];
       return { half, axis, fwd: each, back: each };
     }
-    const DEG = Math.PI / 180;
     for (const l of links) {
       const A = junction(find(l.a));
       const B = junction(find(l.b));
       if (A === B) continue;
       const pts = [{ x: A.x, z: A.z }, ...l.pts.slice(1, -1), { x: B.x, z: B.z }];
-      // stations along it: the ends and every bend over 12° at least 15 m from the last station and from the far end
-      const stations = [A];
-      let last = pts[0];
-      let rest = l.len;
-      for (let k = 1; k < pts.length - 1; k++) {
-        const p1 = pts[k];
-        const p2 = pts[k + 1];
-        const d0 = Math.hypot(p1.x - last.x, p1.z - last.z);
-        rest -= Math.hypot(p1.x - pts[k - 1].x, p1.z - pts[k - 1].z);
-        let turn = Math.abs(Math.atan2(p2.z - p1.z, p2.x - p1.x) - Math.atan2(p1.z - last.z, p1.x - last.x));
-        if (turn > Math.PI) turn = 2 * Math.PI - turn;
-        if (turn < 12 * DEG || d0 < 15 || rest < 15) continue;
-        const s = { x: p1.x, z: p1.z, hx: 0, hz: 0, signal: false, in: [], out: [], general: true, shape: true };
-        nodes.push(s);
-        stations.push(s);
-        last = p1;
+      // Stations along it: the ends and the fewest bends that keep every straight run within 1 m of the street's
+      // centreline (Douglas-Peucker), each run at least 8.5 m long. A bend nearer an end is replaced by the point 8.5 m
+      // from that end, so that the run to the junction doesn't cut the corner across the sidewalk.
+      const arc = [0];
+      for (let k = 1; k < pts.length; k++) arc.push(arc[k - 1] + Math.hypot(pts[k].x - pts[k - 1].x, pts[k].z - pts[k - 1].z));
+      const total = arc[arc.length - 1];
+      const at = (s) => {
+        let k = 1;
+        while (k < pts.length - 1 && arc[k] < s) k++;
+        const t = (s - arc[k - 1]) / Math.max(1e-9, arc[k] - arc[k - 1]);
+        return { x: pts[k - 1].x + (pts[k].x - pts[k - 1].x) * t, z: pts[k - 1].z + (pts[k].z - pts[k - 1].z) * t, s };
+      };
+      // (runs under 8 m are dropped by addEdgeGeneral: the minimum is kept in straight distance, 8.5 m for rounding)
+      const RUN = 8.5;
+      const apart = (p, q) => Math.hypot(q.x - p.x, q.z - p.z) >= RUN;
+      const A0 = pts[0], B0 = pts[pts.length - 1];
+      const cands = [];
+      const inFrom = (end, dir) => {
+        for (let s = dir > 0 ? 0 : total; dir > 0 ? s <= total : s >= 0; s += dir * 0.5) if (apart(end, at(s))) return at(s);
+        return null;
+      };
+      const first = inFrom(A0, 1), last = inFrom(B0, -1);
+      if (first && last && first.s < last.s) {
+        cands.push(first);
+        for (let k = 1; k < pts.length - 1; k++) if (arc[k] > first.s && arc[k] < last.s) cands.push({ x: pts[k].x, z: pts[k].z, s: arc[k] });
+        cands.push(last);
       }
+      // Farthest point of the centreline (between arc lengths s0 and s1) from the chord p -> q
+      const deviation = (p, q, s0, s1) => {
+        const dx = q.x - p.x, dz = q.z - p.z, L = Math.hypot(dx, dz) || 1e-9;
+        let d = 0;
+        for (let k = 1; k < pts.length - 1; k++) if (arc[k] > s0 && arc[k] < s1) d = Math.max(d, Math.abs((pts[k].x - p.x) * dz - (pts[k].z - p.z) * dx) / L);
+        for (const c of cands) if (c.s > s0 && c.s < s1) d = Math.max(d, Math.abs((c.x - p.x) * dz - (c.z - p.z) * dx) / L);
+        return d;
+      };
+      const stations = [A];
+      const split = (p, q, s0, s1) => {
+        if (deviation(p, q, s0, s1) <= 1) return;
+        let best = null, far = -1;
+        for (const c of cands) {
+          if (c.s <= s0 || c.s >= s1 || !apart(p, c) || !apart(c, q)) continue;
+          const dx = q.x - p.x, dz = q.z - p.z, d = Math.abs((c.x - p.x) * dz - (c.z - p.z) * dx) / (Math.hypot(dx, dz) || 1e-9);
+          if (d > far) { far = d; best = c; }
+        }
+        if (!best) return;
+        const node = { x: best.x, z: best.z, hx: 0, hz: 0, signal: false, in: [], out: [], general: true, shape: true };
+        split(p, best, s0, best.s);
+        nodes.push(node);
+        stations.push(node);
+        split(best, q, best.s, s1);
+      };
+      split(pts[0], pts[pts.length - 1], 0, total);
       stations.push(B);
       const lanes = lanesOf(l);
       for (let k = 0; k + 1 < stations.length; k++) runs.push({ from: stations[k], to: stations[k + 1], ...lanes });
