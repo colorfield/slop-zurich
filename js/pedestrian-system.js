@@ -1,5 +1,5 @@
 import { blockAt } from './city-config.js';
-import { surfaceHeight } from './terrain.js';
+import { surfaceHeight, ROAD_TOP, SIDEWALK_TOP } from './terrain.js';
 import { createPedestrianRoutes } from './pedestrian-routes.js';
 import { PersonCrowd, PersonRig, PEDESTRIAN_DIVE_DURATION } from './pedestrians.js';
 
@@ -516,10 +516,10 @@ function createPedestrianSystem(network, { player, nearEdges, nearSignals, mayCr
   }
 
   // Walking surface around a pedestrian: Zurich's terrain or the bridge deck it walks on (terrain.js; p.surfaceY keeps
-  // to the level it is on), sidewalks 0.22 m above the road, and crosswalk tracks start and end with 2 m of sidewalk
-  // (the rig steps down and up the curbs)
-  const SIDEWALK_Y = 0.22;
-  const CROSSWALK_Y = 0.012;
+  // to the level it is on): the sidewalk is the terrain, the crosswalks are painted on the roadway laid over it, and
+  // crosswalk tracks start and end with 2 m of sidewalk (the rig steps over the curbs)
+  const SIDEWALK_Y = SIDEWALK_TOP;
+  const CROSSWALK_Y = ROAD_TOP + 0.012;
   function pedGround(p, x, z) {
     const surface = surfaceHeight(x, z, p.surfaceY);
     if (!p.node) return surface + SIDEWALK_Y;

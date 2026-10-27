@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 const source = ['traffic.js', 'pedestrian-system.js']
   .map((file) => readFileSync(join(__dirname, '../js', file), 'utf8')).join('\n');
-const FLAT_WORLD = { surfaceHeight: () => 0, groundHeight: () => 0, deckHeight: () => NaN, elevate: (v) => { v.y = 0; v.slope = 0; } };
+const FLAT_WORLD = { ROAD_TOP: 0, surfaceHeight: () => 0, groundHeight: () => 0, deckHeight: () => NaN, elevate: (v) => { v.y = 0; v.slope = 0; } };
 function productionFunction(name, context) {
   const match = source.match(new RegExp(`  function ${name}\\([^]*?\\n  \\}`));
   assert.ok(match, `${name} is present`);

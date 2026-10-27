@@ -14,6 +14,15 @@ import { ZURICH_DATA } from './zurich-geodata.js';
 
 const TERRAIN_URL = new URL('../data/zurich-terrain.bin', import.meta.url);
 
+// Heights of the drawn surfaces above the terrain. The engine's flat world has the roadway at 0 and raised sidewalks
+// (0.22 m, city-config.js ISLAND_BOUNDS.sidewalkHeight); here the terrain itself is the sidewalk, and the roads are
+// laid on it (city-grid.js: 0.06 m layer + drapeOverlay's 0.05 m lift).
+export const ROAD_TOP = 0.11;
+export const SIDEWALK_TOP = 0;
+const ENGINE_SIDEWALK = 0.22;
+// Flat-world objects standing on the engine's sidewalks (their base at 0.15-0.3 m) stand on the terrain instead
+const sidewalkDrop = (base) => (base >= 0.15 && base <= 0.3 ? ENGINE_SIDEWALK - SIDEWALK_TOP : 0);
+
 async function loadBinary(url) {
   if (url.protocol === 'file:') {
     const { readFile } = await import('node:fs/promises');
@@ -239,6 +248,7 @@ const isIdentity = (m) => m.equals(_m.identity());
  * Lays an engine-built static subtree (built for a flat world) onto the terrain:
  *  - small objects (< 20 m) and groups of them move rigidly by the surface height under their centre, staying upright;
  *  - instanced meshes move each instance the same way;
+ *  - both come down from the engine's raised sidewalks onto the terrain (sidewalkDrop);
  *  - large flat meshes (ground decals: road paint, plazas) are draped; other large merged meshes are displaced per vertex.
  * Subtrees whose userData.terrain is 'absolute' (already in world heights) are left alone.
  */
@@ -255,7 +265,7 @@ export function placeOnTerrain(root, stats = { rigid: 0, instances: 0, draped: 0
         obj.getMatrixAt(i, _m);
         _v.setFromMatrixPosition(_m).applyMatrix4(obj.matrixWorld);
         // The world-space lift expressed in the mesh's own frame
-        lifted.copy(_v).setY(_v.y + surfaceHeight(_v.x, _v.z)).applyMatrix4(_inv);
+        lifted.copy(_v).setY(_v.y + surfaceHeight(_v.x, _v.z) - sidewalkDrop(_v.y)).applyMatrix4(_inv);
         _m.elements[12] = lifted.x; _m.elements[13] = lifted.y; _m.elements[14] = lifted.z;
         obj.setMatrixAt(i, _m);
       }
@@ -270,7 +280,7 @@ export function placeOnTerrain(root, stats = { rigid: 0, instances: 0, draped: 0
       const radius = size ? Math.hypot(size.x, size.z) / 2 : 0;
       if (!size || radius <= RIGID_RADIUS) {
         const c = size ? _box.getCenter(new THREE.Vector3()) : _v.setFromMatrixPosition(obj.matrixWorld);
-        const dy = surfaceHeight(c.x, c.z);
+        const dy = surfaceHeight(c.x, c.z) - (size ? sidewalkDrop(_box.min.y) : 0);
         // Rigid lift in the parent's frame (parents here are plain, unrotated groups)
         obj.position.y += dy;
         obj.updateMatrixWorld(true);

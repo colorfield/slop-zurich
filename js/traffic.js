@@ -5,7 +5,7 @@ import { vehicleContact, resolveVehicleContact, sweptVehicleContact } from './ve
 import { signalPhase, walkSignal } from './city-config.js';
 import { cityUniforms, createContactShadowMaterial, createCarFlareMaterial } from './tsl-materials.js';
 import { HEADLIGHTS, createVehicleHeadlight, placeVehicleHeadlight } from './vehicle-lights.js';
-import { surfaceHeight, deckHeight, groundHeight } from './terrain.js';
+import { surfaceHeight, deckHeight, groundHeight, ROAD_TOP } from './terrain.js';
 import {
   BODY_SPECS,
   BUS_SPEC,
@@ -1380,15 +1380,16 @@ function createTrafficSystem(scene, sidewalks, obstacles, signalIntersections) {
     occupy(e.occ[lane], v, s);
   }
 
-  // Zurich's relief: a vehicle rides on the terrain or on a bridge deck, whichever is nearest its current height. A
+  // Zurich's relief: a vehicle rides on the roadway laid on the terrain or on a bridge deck, whichever is nearest its
+  // current height. A
   // vehicle (re)appearing starts on a deck only if its whole street lies on the bridge; otherwise the street passes
   // under it (the Hardbrücke spans several). `slope`: the pitch of the street over the vehicle's length.
   function elevate(v, half) {
     if (v.y === undefined) {
       const e = v.edge;
       const onDeck = !!e && [0, 0.5, 1].every((t) => Number.isFinite(deckHeight(e.x0 + e.dx * e.span * t, e.z0 + e.dz * e.span * t)));
-      v.y = surfaceHeight(v.x, v.z, onDeck ? Infinity : -Infinity);
-    } else v.y = surfaceHeight(v.x, v.z, v.y);
+      v.y = surfaceHeight(v.x, v.z, onDeck ? Infinity : -Infinity) + ROAD_TOP;
+    } else v.y = surfaceHeight(v.x, v.z, v.y) + ROAD_TOP;
     const fx = Math.sin(v.yaw), fz = Math.cos(v.yaw);
     const front = surfaceHeight(v.x + fx * half, v.z + fz * half, v.y), back = surfaceHeight(v.x - fx * half, v.z - fz * half, v.y);
     v.slope = Math.atan2(back - front, 2 * half);
@@ -1694,7 +1695,7 @@ function createTrafficSystem(scene, sidewalks, obstacles, signalIntersections) {
         sp.x += sp.vx * dt;
         sp.y += sp.vy * dt;
         sp.z += sp.vz * dt;
-        const floor = surfaceHeight(sp.x, sp.z, sp.y) + 0.03;
+        const floor = surfaceHeight(sp.x, sp.z, sp.y) + ROAD_TOP + 0.03;
         if (sp.y < floor) {
           sp.y = floor;
           sp.vy = Math.abs(sp.vy) * 0.45;

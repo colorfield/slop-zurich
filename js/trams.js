@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu';
 import { float, mix, mx_noise_float, normalGeometry, positionGeometry, positionWorld, smoothstep, step, vec3 } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ZURICH_DATA } from './zurich-geodata.js';
-import { drapeOverlay, surfaceHeight } from './terrain.js';
+import { drapeOverlay, surfaceHeight, ROAD_TOP } from './terrain.js';
 
 // Zurich's tracks and trams (OSM railway=tram / rail in js/zurich-geodata.js):
 //  - the rails of the VBZ's metre-gauge tram network in the streets, and the SBB's standard-gauge lines on their
@@ -265,7 +265,7 @@ export function buildTrams(scene) {
         const ya = surfaceHeight(a.x, a.z, t.y), yb = surfaceHeight(b.x, b.z, t.y);
         if (n === 0) t.y = ya;
         euler.set(Math.atan2(yb - ya, SECTION), Math.atan2(a.x - b.x, a.z - b.z), 0);
-        sections.setMatrixAt(k++, m.compose(pos.set(cx, (ya + yb) / 2 + 0.07, cz), q.setFromEuler(euler), scale));
+        sections.setMatrixAt(k++, m.compose(pos.set(cx, (ya + yb) / 2 + ROAD_TOP + 0.015, cz), q.setFromEuler(euler), scale)); // on the rails' heads
       }
     }
     sections.count = k;

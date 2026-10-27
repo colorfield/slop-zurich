@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { surfaceHeight } from './terrain.js';
+import { surfaceHeight, ROAD_TOP, SIDEWALK_TOP } from './terrain.js';
 import {
   ISLAND_BOUNDS,
   CENTRAL_PARK_BOUNDS,
@@ -680,7 +680,7 @@ class ThirdPersonControllerManager {
       mesh: root,
       crowd,
       rig,
-      position: spawnPosition(5.2, 8, ISLAND_BOUNDS.sidewalkHeight),
+      position: spawnPosition(5.2, 8, SIDEWALK_TOP),
       heading: SPAWN_HEADING,
       speed: 0,
       verticalVel: 0,
@@ -1636,13 +1636,9 @@ class ThirdPersonControllerManager {
   }
 
   // Height of what stands at (x, z): Zurich's terrain or a bridge deck (whichever is nearest `nearY`, the entity's current
-  // height, so that streets under the Hardbrücke stay under it), plus the curb for people on a sidewalk.
+  // height, so that streets under the Hardbrücke stay under it), on the sidewalk or on the roadway laid over it.
   getGroundHeight(x, z, mode = 'person', nearY) {
-    const surface = surfaceHeight(x, z, nearY);
-    if (mode === 'person') {
-      return surface + (this.isPointOnSidewalk(x, z) ? ISLAND_BOUNDS.sidewalkHeight : 0.0);
-    }
-    return surface;
+    return surfaceHeight(x, z, nearY) + (this.isPointOnSidewalk(x, z) ? SIDEWALK_TOP : ROAD_TOP);
   }
 
   // The colliders whose bounds come within `r` of (x, z), in their original order. They never move, so they are
