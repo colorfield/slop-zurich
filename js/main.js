@@ -10,6 +10,7 @@ import { buildLandmarks } from './landmarks.js';
 import { buildCityBlocks } from './buildings.js';
 import { streamSwissBuildings } from './swissbuildings3d.js';
 import { buildSurroundings } from './surroundings.js';
+import { buildTrams } from './trams.js';
 import { placeOnTerrain, liftColliders } from './terrain.js';
 import { FRAME } from './zurich-frame.js';
 import { buildStreetDetails } from './street-details.js';
@@ -92,6 +93,8 @@ async function initApp() {
     console.warn('[surroundings] the horizon stays empty:', error);
   }
   markInit('surroundings');
+  const trams = buildTrams(scene);
+  markInit('trams');
   const boroughs = buildBoroughs(scene, { sidewalks: cityGrid.sidewalks });
   markInit('boroughs');
   const { colliders: landmarkColliders } = buildLandmarks(scene);
@@ -724,6 +727,7 @@ async function initApp() {
       cameraSystem.camera
     );
     highwayTraffic.update(dt, cameraSystem.camera, controllerManager.getActiveEntity(), controllerManager.activeMode);
+    trams.update(dt);
     if (!document.hidden && now >= nextPlayerSave) {
       savePlayerState();
       nextPlayerSave = now + 5000;
@@ -773,7 +777,7 @@ async function initApp() {
         window.__slopzurich = {
           ready: true, firstFrameAt: performance.now(), init: initTimings.join(', '),
           backend: renderer.backend.isWebGPUBackend ? 'WebGPU' : 'WebGL fallback',
-          scene, renderer, cameraSystem, controllerManager, TELEPORT_LOCATIONS, trafficSystem, swissBuildings: swissStream,
+          scene, renderer, cameraSystem, controllerManager, TELEPORT_LOCATIONS, trafficSystem, swissBuildings: swissStream, trams,
           teleport(key) { const l = TELEPORT_LOCATIONS[key]; return teleportTo(l.x, l.z, l.heading); },
           teleportXZ(x, z, heading = 0) { return teleportTo(x, z, heading); },
           mode(m) { selectMode(m); },

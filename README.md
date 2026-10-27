@@ -25,6 +25,9 @@ Berlin and Warsaw forks and [Slop Utrecht](https://github.com/bertt/slop-utrecht
 - **The horizon**: the relief around the city from **swissALTIRegio** (10 m), in two rings stitched to the city's
   terrain: ±12 km at 50 m (the Uetliberg, the Pfannenstiel, the rest of the lake) and ±91 km at 275 m (the Rigi, the
   Pilatus, the Glarus Alps, the Säntis), lowered by the Earth's curvature, under a lighter haze than New York's.
+- **Trams and tracks**: the rails of the VBZ's metre-gauge network in the streets and of the SBB lines on their
+  ballast, and 40 blue and white articulated trams (five sections bending through the curves) on the right-hand track
+  of the double lines, stopping at the tram stops and keeping their distance (`js/trams.js`).
 - **LV95 world frame**: 1 unit = 1 m, `x = E − 2683000`, `z = 1247700 − N`, `y = height − 406 m` (lake level). The
   WGS84 ↔ LV95 transformation (`js/swiss-projection.js`) matches swisstopo REFRAME to the millimetre.
 - **City of Zurich tree cadastre** (16,000 park and street trees, sized from their surveyed crowns), the official
@@ -91,7 +94,7 @@ cameras, the shadows and the colliders query the same surface.
 ## Ideas
 
 - SWISSIMAGE orthophotos on the ground and the roofs.
-- The VBZ trams on their real tracks (OSM `railway=tram` is already in the data) and timetables (GTFS).
+- The VBZ lines and timetables (GTFS) for the trams, and the trams as obstacles for the traffic and the player.
 - The Polybahn, the Dolderbahn and the lake boats.
 
 ## License and data
