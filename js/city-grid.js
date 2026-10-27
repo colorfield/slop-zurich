@@ -64,7 +64,7 @@ import {
 import { GEO } from './nyc-geodata.js';
 import { LANDMARK_EXCLUSIONS, BERGHAIN_TREE_SITES } from './landmarks.js';
 import { berlinPoints, berlinBounds, berlinPolygonGeometry, berlinStrip, berlinRoadSegments, berlinGeometryGroups } from './berlin-geometry.js';
-import { buildTerrainMeshes, carveDepths, drapeOverlay, displaceGeometry, groundHeight, waterSurfaceHeight, deckHeight } from './terrain.js';
+import { buildTerrainMeshes, carveDepths, drapeOverlay, displaceGeometry, groundHeight, waterSurfaceHeight, deckHeight, deckHalfWidth } from './terrain.js';
 
 // Live construction data consumed by the building and street-detail builders after buildCityGrid().
 let centralParkClearings;
@@ -339,10 +339,13 @@ function buildBerlinCityGrid(scene) {
     }
   }
   deckContext = false;
-  // Bridge structures under the decks: a slab, parapets and, where the gap allows, piers down to the ground
-  let bridgePiers = 0;
+  // Bridge structures under the decks: a slab, parapets and, where the gap allows, piers down to the ground. OSM maps a
+  // wide bridge as side by side ways (the Quaibrücke: footways, cycle lanes, carriageways, tram tracks): their slabs
+  // join into one deck, and the parapets (solid for the player) stand only along its outer edges.
+  let bridgePiers = 0, bridgeParapets = 0;
+  const PARAPET = 0.3, PARAPET_STEP = 1.5;
   for (const s of bridgeSlabs) {
-    const half = s.width / 2 + (s.road.kind === 'footway' || s.road.kind === 'path' ? 0.4 : 2.9);
+    const half = deckHalfWidth(s.road);
     const nx = -s.uz, nz = s.ux;
     const deckAt = (x, z) => { const d = deckHeight(x, z); return d === d ? d : groundHeight(x, z); };
     const pieces = Math.max(1, Math.ceil(s.len / 6));
@@ -352,10 +355,12 @@ function buildBerlinCityGrid(scene) {
       const ya = deckAt(a.x, a.z), yb = deckAt(b.x, b.z);
       if (Math.min(ya - groundHeight(a.x, a.z), yb - groundHeight(b.x, b.z)) < 0.8) continue;
       const len = Math.hypot(b.x - a.x, b.z - a.z);
-      const box = (w, top, bottom, offset) => {
-        const g = new THREE.BoxGeometry(len + 0.04, 1, w);
+      // A box along [u0, u1] of the piece (fractions), `w` across at `offset`, from `bottom` to `top` around the deck
+      const box = (w, top, bottom, offset, u0 = 0, u1 = 1) => {
+        const l = len * (u1 - u0), cx = a.x + (b.x - a.x) * (u0 + u1) / 2 + nx * offset, cz = a.z + (b.z - a.z) * (u0 + u1) / 2 + nz * offset;
+        const g = new THREE.BoxGeometry(l + 0.04, 1, w);
         g.rotateY(-Math.atan2(b.z - a.z, b.x - a.x));
-        g.translate((a.x + b.x) / 2 + nx * offset, 0.5, (a.z + b.z) / 2 + nz * offset);
+        g.translate(cx, 0.5, cz);
         const p = g.attributes.position;
         for (let v = 0; v < p.count; v++) {
           const t = Math.max(0, Math.min(1, ((p.getX(v) - a.x) * (b.x - a.x) + (p.getZ(v) - a.z) * (b.z - a.z)) / (len * len)));
@@ -364,9 +369,32 @@ function buildBerlinCityGrid(scene) {
         }
         g.computeVertexNormals();
         collect(g, curbMat, { world: true });
+        return { cx, cz, l };
       };
       box(half * 2, -0.02, -1.15, 0);
-      for (const side of [-1, 1]) box(0.3, 1.05, -0.02, side * (half - 0.15));
+      // Parapets: along the stretches where no other deck continues the bridge beyond this one's edge
+      const steps = Math.max(1, Math.round(len / PARAPET_STEP));
+      for (const side of [-1, 1]) {
+        const offset = side * (half - PARAPET / 2);
+        const edge = (i) => {
+          const t = (i + 0.5) / steps, x = a.x + (b.x - a.x) * t + nx * side * (half + 0.5), z = a.z + (b.z - a.z) * t + nz * side * (half + 0.5);
+          const other = deckHeight(x, z);
+          return !(other === other && Math.abs(other - (ya + (yb - ya) * t)) < 1.5);
+        };
+        for (let i = 0; i < steps;) {
+          if (!edge(i)) { i++; continue; }
+          let j = i + 1;
+          while (j < steps && edge(j)) j++;
+          const u0 = i / steps, u1 = j / steps, { cx, cz, l } = box(PARAPET, 1.05, -0.02, offset, u0, u1);
+          const y0 = ya + (yb - ya) * u0, y1 = ya + (yb - ya) * u1;
+          const hx = l / 2, hz = PARAPET / 2, cs = s.ux, sn = -s.uz;
+          const ex = Math.abs(cs) * hx + Math.abs(sn) * hz, ez = Math.abs(sn) * hx + Math.abs(cs) * hz;
+          colliders.push({ minX: cx - ex, maxX: cx + ex, minZ: cz - ez, maxZ: cz + ez, baseY: Math.min(y0, y1),
+            minY: Math.min(y0, y1) - 1.15, maxY: Math.max(y0, y1) + 1.05, obb: { cx, cz, hx, hz, cs, sn } });
+          bridgeParapets++;
+          i = j;
+        }
+      }
       // A pier every ~24 m along spans that clear 3 m
       const mid = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 }, under = groundHeight(mid.x, mid.z), top = (ya + yb) / 2 - 1.15;
       if (top - under > 3 && Math.floor(s.len * t0 / 24) !== Math.floor(s.len * t1 / 24)) {
@@ -458,7 +486,7 @@ function buildBerlinCityGrid(scene) {
       group.add(mesh);
     }
   }
-  group.userData = { terrain: 'absolute', city: BERLIN_DATA.meta.city, source: 'OpenStreetMap, swisstopo swissALTI3D', roads: roadSegments.length, bridgeSegments: bridgeSlabs.length, bridgePiers, mappedTrees: mappedTreeCount, landmarkTrees, proceduralWoodlandTrees: parkTreeSites.length - mappedTreeCount - landmarkTrees,
+  group.userData = { terrain: 'absolute', city: BERLIN_DATA.meta.city, source: 'OpenStreetMap, swisstopo swissALTI3D', roads: roadSegments.length, bridgeSegments: bridgeSlabs.length, bridgePiers, bridgeParapets, mappedTrees: mappedTreeCount, landmarkTrees, proceduralWoodlandTrees: parkTreeSites.length - mappedTreeCount - landmarkTrees,
     clippedPedestrianPieces, clippedSidewalkPieces, curbRuns, junctionClippedCurbs: true, junctionClippedSidewalks: true };
   scene.add(group);
   return { group, sidewalks, footprints, highwayLanes: [], colliders };

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
+import { register } from 'node:module';
 import { wgs84ToLv95, lv95ToWgs84 } from '../js/swiss-projection.js';
 import { FRAME, WORLD_BOUNDS, lv95ToWorld } from '../js/zurich-frame.js';
 import { parseTerrain, gridHeight } from '../js/terrain-grid.js';
@@ -50,6 +51,27 @@ test('the Hardbrücke spans the tracks well above them; the Limmat bridges stay 
       assert.ok(Math.max(...r.ys) < 6, `${name} at most a few metres above the lake level`);
     }
   }
+});
+
+test('one stands on a bridge over the water, never under it; under the Hardbrücke, the streets stay on the ground', async () => {
+  // js/terrain.js only draws with three.js inside its functions: an empty stand-in lets Node load its height functions
+  const three = encodeURIComponent('export class Box3 {} export class Vector3 {} export class Matrix4 {}');
+  register(`data:text/javascript,${encodeURIComponent(`export async function resolve(s, c, next) { return s === 'three/webgpu' ? { url: 'data:text/javascript,${three}', shortCircuit: true } : next(s, c); }`)}`);
+  const { groundHeight, deckHeight, surfaceHeight } = await import('../js/terrain.js');
+  const quai = ZURICH_DATA.roads.find((r) => r.name === 'Quaibrücke' && r.bridge);
+  const mid = (r, i = 0) => ({ x: (r.pts[i * 2] + r.pts[i * 2 + 2]) / 2, z: (r.pts[i * 2 + 1] + r.pts[i * 2 + 3]) / 2 });
+  const q = mid(quai), qDeck = deckHeight(q.x, q.z), qWater = groundHeight(q.x, q.z);
+  assert.ok(qDeck - qWater > 2, 'the Quaibrücke clears the water');
+  assert.equal(surfaceHeight(q.x, q.z, qWater), qDeck, 'from the water level, the Quaibrücke deck');
+  // (the Hardbrücke also crosses the Limmat at its northern end: over the tracks, south of it)
+  const limmat = ZURICH_DATA.water.find((w) => w.name === 'Limmat').ring;
+  const southOfLimmat = (p) => p.z > Math.max(...limmat.filter((_, i) => i % 2 && Math.abs(limmat[i - 1] - p.x) < 50));
+  const hard = ZURICH_DATA.roads.filter((r) => r.name === 'Hardbrücke' && r.bridge && r.kind === 'primary')
+    .flatMap((r) => r.ys.slice(1).map((_, i) => mid(r, i))).filter(southOfLimmat)
+    .map((p) => ({ ...p, d: deckHeight(p.x, p.z), g: groundHeight(p.x, p.z) })).sort((a, b) => b.d - b.g - (a.d - a.g))[0];
+  assert.ok(hard.d - hard.g > 8, 'the Hardbrücke over the tracks');
+  assert.equal(surfaceHeight(hard.x, hard.z, hard.g), hard.g, 'under the Hardbrücke');
+  assert.equal(surfaceHeight(hard.x, hard.z, hard.d), hard.d, 'on the Hardbrücke');
 });
 
 test('the city keeps its landmarks, quarters, trees and road graph', () => {

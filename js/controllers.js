@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { surfaceHeight, ROAD_TOP, SIDEWALK_TOP } from './terrain.js';
+import { surfaceHeight, deckHeight, ROAD_TOP, SIDEWALK_TOP } from './terrain.js';
 import {
   ISLAND_BOUNDS,
   CENTRAL_PARK_BOUNDS,
@@ -8,8 +8,7 @@ import {
   blockAt,
   streetZ,
   defaultSpawn,
-  waterAt,
-  nearestRoads
+  waterAt
 } from './city-config.js';
 import { cityUniforms, createCarPaintMaterial, createContactShadowMaterial } from './tsl-materials.js';
 import {
@@ -1630,9 +1629,11 @@ class ThirdPersonControllerManager {
     return !!b && !(b.park > 0.6 && !b.median);
   }
 
-  isUnbridgedWater(x, z) {
-    return typeof waterAt === 'function' && waterAt(x, z) &&
-      !(typeof nearestRoads === 'function' && nearestRoads(x, z, 25).some(({road, dist}) => road.bridge && dist < road.w / 2 + 1));
+  // The water, unless a bridge deck carries whoever is up on it (at about height `y`; there is no going under it)
+  isUnbridgedWater(x, z, y) {
+    if (typeof waterAt !== 'function' || !waterAt(x, z)) return false;
+    const deck = deckHeight(x, z);
+    return !(deck === deck && (y === undefined || y > deck - 1));
   }
 
   // Height of what stands at (x, z): Zurich's terrain or a bridge deck (whichever is nearest `nearY`, the entity's current
@@ -1683,7 +1684,7 @@ class ThirdPersonControllerManager {
   resolveHorizontalCollision(pos, radius, carEntity = null, entity = carEntity) {
     // The detailed island (the helicopter may roam out over the harbour & the boroughs)
     const heli = this.activeMode === 'helicopter';
-    if (!heli && this.isUnbridgedWater(pos.x, pos.z)) {
+    if (!heli && this.isUnbridgedWater(pos.x, pos.z, pos.y)) {
       const last = entity?._lastDryPosition;
       if (last) { pos.x = last.x; pos.z = last.z; }
       if (entity) { entity.speed *= 0.2; if ('vx' in entity) { entity.vx *= 0.2; entity.vz *= 0.2; } }
@@ -1889,7 +1890,7 @@ class ThirdPersonControllerManager {
 
     p.position.x += Math.sin(p.heading) * p.speed * dt;
     p.position.z += Math.cos(p.heading) * p.speed * dt;
-    this.resolveHorizontalCollision(p.position, 0.48);
+    this.resolveHorizontalCollision(p.position, 0.48, null, p);
 
     const groundY = this.getGroundHeight(p.position.x, p.position.z, 'person', p.position.y);
     if (this.keys.up && p.position.y <= groundY + 0.02) {

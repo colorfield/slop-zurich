@@ -7,7 +7,8 @@ import { ZURICH_DATA } from './zurich-geodata.js';
 //    draws it (see terrain-grid.js).
 //  - deckHeight(x, z): the surveyed deck of the bridge under (x, z) (tools/build-zurich-geodata.mjs, roads[].ys), or NaN.
 //  - surfaceHeight(x, z, nearY): what an actor at height ~nearY stands on: the deck when on a bridge, unless it is
-//    clearly passing underneath (the Hardbrücke spans streets and the tracks).
+//    clearly passing underneath on land (the Hardbrücke spans streets and the tracks; there is no going under a bridge
+//    over the water).
 //  - Static geometry built flat by the engine is laid onto the surface afterwards: drapeOverlay() for ground layers
 //    (roads, paths, lawns, rivers: subdivided and lifted vertex by vertex), placeOnTerrain() for everything else
 //    (street furniture, trees, facades, …).
@@ -36,12 +37,19 @@ async function loadBinary(url) {
 
 export const TERRAIN = parseTerrain(await loadBinary(TERRAIN_URL));
 
+// The rivers and the lake (ZURICH_DATA.water rings, flat [x, z, …])
+const pip = (ring, x, z) => { let inside = false; for (let i = 0, j = ring.length - 2; i < ring.length; j = i, i += 2) { if ((ring[i + 1] > z) !== (ring[j + 1] > z) && x < ((ring[j] - ring[i]) * (z - ring[i + 1])) / (ring[j + 1] - ring[i + 1]) + ring[i]) inside = !inside; } return inside; };
+const WATER = ZURICH_DATA.water.map((w) => {
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (let i = 0; i < w.ring.length; i += 2) { minX = Math.min(minX, w.ring[i]); maxX = Math.max(maxX, w.ring[i]); minZ = Math.min(minZ, w.ring[i + 1]); maxZ = Math.max(maxZ, w.ring[i + 1]); }
+  return { ring: w.ring, holes: w.holes || [], minX, maxX, minZ, maxZ };
+});
+const inWater = (x, z) => WATER.some((w) => x >= w.minX && x <= w.maxX && z >= w.minZ && z <= w.maxZ && pip(w.ring, x, z) && !w.holes.some((h) => pip(h, x, z)));
+
 // Bridgeheads: the survey lowers the ground under bridges towards the river, bridgeheads included. The data tool lists
 // where the surveyed road is higher (ZURICH_DATA.terrainPatches); the ground rises smoothly to meet it there (never
 // inside the rivers and the lake).
 {
-  const pip = (ring, x, z) => { let inside = false; for (let i = 0, j = ring.length - 2; i < ring.length; j = i, i += 2) { if ((ring[i + 1] > z) !== (ring[j + 1] > z) && x < ((ring[j] - ring[i]) * (z - ring[i + 1])) / (ring[j + 1] - ring[i + 1]) + ring[i]) inside = !inside; } return inside; };
-  const inWater = (x, z) => ZURICH_DATA.water.some((w) => pip(w.ring, x, z) && !(w.holes || []).some((h) => pip(h, x, z)));
   const { cols, rows, cell, minX, minZ, heights } = TERRAIN;
   for (const { x, z, h, r } of ZURICH_DATA.terrainPatches || []) {
     for (let j = Math.max(0, Math.ceil((z - r - minZ) / cell)); j <= Math.min(rows - 1, Math.floor((z + r - minZ) / cell)); j++) {
@@ -59,13 +67,15 @@ export const groundNormal = (x, z, out) => gridNormal(TERRAIN, x, z, out);
 
 // --- Bridge decks -------------------------------------------------------------------------------------------------------
 const DECK_CELL = 32;
+/** Half width of a bridge's deck: the carriageway plus the sidewalks city-grid.js lays along it (width / 2 + 2.8 m), a
+ *  path, or a track bed. The deck slab and its parapets are drawn to this edge. */
+export const deckHalfWidth = (r) => (r.width ? r.width / 2 + (/^(footway|path|steps|cycleway|pedestrian)$/.test(r.kind) ? 0.6 : 3.2) : 3);
 const deckCells = new Map();
 let deckSegments = 0;
 for (const list of [ZURICH_DATA.roads, ZURICH_DATA.railways]) {
   for (const r of list) {
     if (!r.bridge || r.tunnel || !r.ys) continue;
-    // Carriageway plus the sidewalks city-grid.js lays along it (width / 2 + 2.8 m), or a track bed
-    const half = r.width ? r.width / 2 + (/^(footway|path|steps|cycleway|pedestrian)$/.test(r.kind) ? 0.6 : 3.2) : 3;
+    const half = deckHalfWidth(r);
     for (let i = 0; i + 1 < r.ys.length; i++) {
       const s = { ax: r.pts[i * 2], az: r.pts[i * 2 + 1], bx: r.pts[i * 2 + 2], bz: r.pts[i * 2 + 3], ya: r.ys[i], yb: r.ys[i + 1], half, road: r };
       const ix0 = Math.floor((Math.min(s.ax, s.bx) - half) / DECK_CELL), ix1 = Math.floor((Math.max(s.ax, s.bx) + half) / DECK_CELL);
@@ -94,13 +104,13 @@ export function deckHeight(x, z) {
   return h;
 }
 
-/** The surface at (x, z) for something at about `nearY`: a bridge deck, or the ground (also under a bridge) */
+/** The surface at (x, z) for something at about `nearY`: a bridge deck, or the ground under a bridge (never the water) */
 export function surfaceHeight(x, z, nearY) {
   const g = groundHeight(x, z);
   const d = deckHeight(x, z);
   if (!(d === d)) return g;
   if (nearY === undefined || d - g < 2) return d > g ? d : g;
-  return Math.abs(nearY - d) <= Math.abs(nearY - g) ? d : g;
+  return Math.abs(nearY - d) <= Math.abs(nearY - g) || inWater(x, z) ? d : g;
 }
 
 // --- Water level: the river and lake surfaces are the lowest ground within ~12 m (banks and quays rise above) --------

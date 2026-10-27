@@ -4,6 +4,7 @@ const terrain = {
   groundHeight: () => 0,
   surfaceHeight: () => 0,
   deckHeight: () => NaN,
+  deckHalfWidth: () => 3,
   waterSurfaceHeight: () => 0,
   // The engine's own flat world: roadway at 0, raised sidewalks
   ROAD_TOP: 0,
