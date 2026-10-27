@@ -64,7 +64,7 @@ import {
 import { GEO } from './nyc-geodata.js';
 import { LANDMARK_EXCLUSIONS, BERGHAIN_TREE_SITES } from './landmarks.js';
 import { berlinPoints, berlinBounds, berlinPolygonGeometry, berlinStrip, berlinRoadSegments, berlinGeometryGroups } from './berlin-geometry.js';
-import { buildTerrainMeshes, carveDepths, drapeOverlay, displaceGeometry, groundHeight, waterSurfaceHeight, deckHeight, deckHalfWidth } from './terrain.js';
+import { buildTerrainMeshes, carveDepths, drapeOverlay, displaceGeometry, groundHeight, waterSurfaceHeight, deckHeight, deckHalfWidth, pierClear } from './terrain.js';
 
 // Live construction data consumed by the building and street-detail builders after buildCityGrid().
 let centralParkClearings;
@@ -395,9 +395,9 @@ function buildBerlinCityGrid(scene) {
           i = j;
         }
       }
-      // A pier every ~24 m along spans that clear 3 m
+      // A pier every ~24 m along spans that clear 3 m, off the streets passing underneath
       const mid = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 }, under = groundHeight(mid.x, mid.z), top = (ya + yb) / 2 - 1.15;
-      if (top - under > 3 && Math.floor(s.len * t0 / 24) !== Math.floor(s.len * t1 / 24)) {
+      if (top - under > 3 && Math.floor(s.len * t0 / 24) !== Math.floor(s.len * t1 / 24) && pierClear(mid.x, mid.z, s.ux, s.uz, half)) {
         const pier = new THREE.BoxGeometry(1.2, top - under + 0.5, half * 1.2);
         pier.rotateY(-Math.atan2(b.z - a.z, b.x - a.x));
         pier.translate(mid.x, under - 0.5 + (top - under + 0.5) / 2, mid.z);

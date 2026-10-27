@@ -100,6 +100,15 @@ test('the ramps to the Ulmbergtunnel stay level with the street; the Rämistrass
   assert.ok(Math.max(...rami.map((r) => trench(r, groundHeight))) > 3, 'the Rämistrasse in its cutting');
 });
 
+test('the Lindenhofstrasse bridge stands no pier on the Uraniastrasse under it', async () => {
+  const { pierClear } = await import('../js/terrain.js');
+  const bridge = ZURICH_DATA.roads.find((r) => r.name === 'Lindenhofstrasse' && r.bridge);
+  const [ax, az, bx, bz] = bridge.pts, len = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / len, uz = (bz - az) / len;
+  const at = (d) => [ax + ux * d, az + uz * d, ux, uz, 6.2];
+  assert.equal(pierClear(...at(23.75)), false, 'the pier 24 m along, over the street');
+  assert.equal(pierClear(...at(8)), true, 'between the bridgehead and the street');
+});
+
 test('the city keeps its landmarks, quarters, trees and road graph', () => {
   for (const name of ['Grossmünster', 'Fraumünster', 'Zürich HB', 'ETH Hauptgebäude', 'Opernhaus', 'Prime Tower']) {
     assert.ok(ZURICH_DATA.landmarks[name], name);

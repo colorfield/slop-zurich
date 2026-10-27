@@ -113,6 +113,43 @@ export function surfaceHeight(x, z, nearY) {
   return Math.abs(nearY - d) <= Math.abs(nearY - g) || inWater(x, z) ? d : g;
 }
 
+// Streets on the ground, kept clear of the bridges' piers (city-grid.js stands one every ~24 m along a span: the
+// Lindenhofstrasse's would land in the middle of the Uraniastrasse under it). Only the streets crossing under a bridge
+// count: the lanes running beneath a viaduct along it (the Hardstrasse under the Hardbrücke) keep its piers.
+const STREET_CELL = 48;
+const streetCells = new Map();
+for (const r of ZURICH_DATA.roads) {
+  if (r.bridge || r.tunnel || !/^(motorway|trunk|primary|secondary|tertiary)(_link)?$|^(residential|unclassified|living_street|service)$/.test(r.kind)) continue;
+  const half = (r.width || 6) / 2;
+  for (let i = 0; i + 2 < r.pts.length; i += 2) {
+    const s = { ax: r.pts[i], az: r.pts[i + 1], bx: r.pts[i + 2], bz: r.pts[i + 3], half };
+    s.len = Math.hypot(s.bx - s.ax, s.bz - s.az) || 1e-9;
+    for (let ix = Math.floor((Math.min(s.ax, s.bx) - half) / STREET_CELL); ix <= Math.floor((Math.max(s.ax, s.bx) + half) / STREET_CELL); ix++) {
+      for (let iz = Math.floor((Math.min(s.az, s.bz) - half) / STREET_CELL); iz <= Math.floor((Math.max(s.az, s.bz) + half) / STREET_CELL); iz++) {
+        const k = ix * 65536 + iz;
+        if (!streetCells.has(k)) streetCells.set(k, []);
+        streetCells.get(k).push(s);
+      }
+    }
+  }
+}
+
+/** Whether a bridge pier at (x, z), across the deck (direction ux, uz) of half width `half`, keeps off the streets
+ *  crossing under it (at more than 30° to the deck) */
+export function pierClear(x, z, ux, uz, half) {
+  const nx = -uz, nz = ux, across = half * 0.6 + 0.5;
+  for (let k = -4; k <= 4; k++) {
+    const px = x + nx * across * k / 4, pz = z + nz * across * k / 4;
+    for (const s of streetCells.get(Math.floor(px / STREET_CELL) * 65536 + Math.floor(pz / STREET_CELL)) || []) {
+      const dx = s.bx - s.ax, dz = s.bz - s.az;
+      if (Math.abs(ux * dz - uz * dx) < 0.5 * s.len) continue;
+      const t = Math.max(0, Math.min(1, ((px - s.ax) * dx + (pz - s.az) * dz) / (s.len * s.len)));
+      if (Math.hypot(s.ax + t * dx - px, s.az + t * dz - pz) < s.half + 1.1) return false;
+    }
+  }
+  return true;
+}
+
 // --- Tunnel approaches: the ramps down to the road tunnels' mouths are filled to the street ------------------------------
 // The engine has no underground: the tunnels are not drawn and their mouths are filled by the data tool, but the open
 // ramps leading down to them stay in the bare-earth survey as trenches between retaining walls, which the 4 m grid
