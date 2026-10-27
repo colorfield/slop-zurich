@@ -31,7 +31,10 @@ test('native module entry and imports share canonical preloaded URLs on GitHub P
   assert.equal(entries.length, 1);
   assert.equal(entries[0][1], './js/main.js');
   assert.ok(links.includes(entries[0][1]));
-  assert.equal([...html.matchAll(/<script\b/g)].length, 2, 'only the import map and native entry are needed');
+  const analytics = /<script defer data-domain="[^"]+" src="https:\/\/plausible\.colorfield\.dev\/js\/script\.js"><\/script>/;
+  assert.match(html, analytics, 'the Plausible analytics script is deferred');
+  const appScripts = [...html.replace(analytics, '').matchAll(/<script\b/g)];
+  assert.equal(appScripts.length, 2, 'only the import map and native entry are needed');
   const base = 'https://example.test/slop-newyork/';
   const urls = new Set(links.map((src) => new URL(src, base).href));
   for (const src of links) {
