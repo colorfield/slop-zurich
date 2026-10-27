@@ -184,6 +184,22 @@ const terrainPatches = []; // bridgeheads where the terrain must rise to the sur
   const DECKS = path.join(CACHE, 'bridge_decks.json');
   const surveyed = fs.existsSync(DECKS) ? JSON.parse(fs.readFileSync(DECKS, 'utf8')).decks : {};
   const pos = new Map(), adj = new Map(), majorDeck = new Set();
+  // Under a tree the surface model reads the crown, not the deck (the Schanzengrabenpromenade, a boardwalk along the
+  // canal, measured 11-19 m up): samples more than 3 m up within a municipal tree's crown are ignored.
+  const TREE_CELL = 32, crowns = new Map();
+  const treeFile = path.join(CACHE, 'zurich_trees.json');
+  for (const t of fs.existsSync(treeFile) ? JSON.parse(fs.readFileSync(treeFile, 'utf8')).trees : []) {
+    if (!t.crown) continue;
+    const { x, z } = lv95ToWorld(t.E, t.N), k = `${Math.floor(x / TREE_CELL)}/${Math.floor(z / TREE_CELL)}`;
+    if (!crowns.has(k)) crowns.set(k, []);
+    crowns.get(k).push({ x, z, r: t.crown / 2 });
+  }
+  const underCrown = ([x, z]) => {
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+      for (const t of crowns.get(`${Math.floor(x / TREE_CELL) + i}/${Math.floor(z / TREE_CELL) + j}`) || []) if (Math.hypot(t.x - x, t.z - z) < t.r) return true;
+    }
+    return false;
+  };
   const link = (a, b, w) => { if (!adj.has(a)) adj.set(a, []); adj.get(a).push([b, w]); };
   for (const way of deckWays) {
     way.nodes.forEach((id, i) => { pos.set(id, way.pts[i]); if (!way.minor) majorDeck.add(id); });
@@ -196,7 +212,8 @@ const terrainPatches = []; // bridgeheads where the terrain must rise to the sur
   const pip = (ring, x, z) => { let inside = false; for (let i = 0, j = ring.length - 2; i < ring.length; j = i, i += 2) { if ((ring[i + 1] > z) !== (ring[j + 1] > z) && x < ((ring[j] - ring[i]) * (z - ring[i + 1])) / (ring[j + 1] - ring[i + 1]) + ring[i]) inside = !inside; } return inside; };
   const inWater = ([x, z]) => water.some((w) => pip(w.ring, x, z) && !w.holes.some((h) => pip(h, x, z)));
   const h = new Map(), anchored = new Set();
-  let measured = 0;
+  let measured = 0, canopy = 0;
+  for (const [id] of adj) if (Number.isFinite(surveyed[id]) && surveyed[id] - FRAME.H0 - ground(id) > 3 && underCrown(pos.get(id))) { delete surveyed[id]; canopy++; }
   for (const [id, edges] of adj) {
     // Abutments: where a bridge meets a way at ground level (on land: tram tracks mapped across a bridge without the
     // bridge tag don't count), and the loose ends of bridge chains. They sit at ground level, except that
@@ -256,7 +273,7 @@ const terrainPatches = []; // bridgeheads where the terrain must rise to the sur
     // Decks never dip below the terrain they cross; heights in the world frame (above FRAME.H0)
     way.record.ys = way.kept.map((i) => r2(Math.max(smooth.get(way.nodes[i]), gridHeight(TERRAIN, way.pts[i][0], way.pts[i][1]))));
   }
-  log(`bridge decks: ${deckWays.length} ways, ${adj.size} nodes (${measured - rejected} surveyed, ${rejected} rejected samples), ${terrainPatches.length} bridgeheads raised`);
+  log(`bridge decks: ${deckWays.length} ways, ${adj.size} nodes (${measured - rejected} surveyed, ${rejected} rejected samples, ${canopy} under trees), ${terrainPatches.length} bridgeheads raised`);
 }
 
 // --- Quarters (Quartiere, OSM admin_level 10) -----------------------------------------------------------------------------

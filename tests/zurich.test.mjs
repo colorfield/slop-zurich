@@ -51,6 +51,11 @@ test('the Hardbrücke spans the tracks well above them; the Limmat bridges stay 
       assert.ok(Math.max(...r.ys) < 6, `${name} at most a few metres above the lake level`);
     }
   }
+  // The boardwalk along the Schanzengraben, under trees (the surface model reads their crowns 11-19 m up); its stairs
+  // climb to the street bridges
+  for (const r of ZURICH_DATA.roads.filter((q) => q.name === 'Schanzengrabenpromenade' && q.bridge)) {
+    r.ys.forEach((y, i) => assert.ok(y - gridHeight(TERRAIN, r.pts[i * 2], r.pts[i * 2 + 1]) < 5, `Schanzengrabenpromenade ${r.id} point ${i} by the canal, not in the treetops`));
+  }
 });
 
 test('one stands on a bridge over the water, never under it; under the Hardbrücke, the streets stay on the ground', async () => {
