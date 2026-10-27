@@ -2,6 +2,11 @@
 // The digital terrain model (bare earth: no buildings, no bridges) is resampled onto the world frame's terrain grid
 // (js/zurich-frame.js: FRAME.terrainCell metres) and stored as heights above FRAME.H0 in centimetres.
 //
+// The bare-earth model keeps the open cuts that lead underground (the Bahnhofquai underpass, the ramps to the HB's
+// underground stations and car parks, ShopVille's stairs): narrow trenches between retaining walls that a 4 m grid
+// turns into lumps under the streets drawn over them. The engine has no underground, so these pits are filled from the
+// ground around them (OSM ways in tunnels or below ground, tools/data/cache/osm_zurich.json).
+//
 // File layout (little endian): 'ZTR1', uint16 cols, uint16 rows, float32 cell (m), float32 minX, float32 minZ,
 // float32 scale (m per unit), then int16 heights row-major, row j at z = minZ + j * cell, column i at x = minX + i * cell.
 // usage: node tools/build-zurich-terrain.mjs [out.bin]
@@ -9,7 +14,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fromArrayBuffer } from 'geotiff';
-import { FRAME, WORLD_BOUNDS, worldToLv95 } from '../js/zurich-frame.js';
+import { FRAME, WORLD_BOUNDS, worldToLv95, lonLatToWorld } from '../js/zurich-frame.js';
+import { polygons, bbox as ringBox } from './osm-geometry.mjs';
 import { lv95ToWgs84 } from '../js/swiss-projection.js';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -81,7 +87,7 @@ function heightAt(e, n) {
 const cell = FRAME.terrainCell, scale = 0.01;
 const [minX, minZ, maxX, maxZ] = WORLD_BOUNDS;
 const cols = Math.round((maxX - minX) / cell) + 1, rows = Math.round((maxZ - minZ) / cell) + 1;
-const heights = new Int16Array(cols * rows);
+const H = new Float64Array(cols * rows);
 let lo = Infinity, hi = -Infinity, missing = 0;
 for (let j = 0; j < rows; j++) {
   for (let i = 0; i < cols; i++) {
@@ -89,9 +95,83 @@ for (let j = 0; j < rows; j++) {
     let h = heightAt(E, N);
     if (!Number.isFinite(h)) { missing++; h = FRAME.H0; }
     lo = Math.min(lo, h); hi = Math.max(hi, h);
-    heights[j * cols + i] = Math.round((h - FRAME.H0) / scale);
+    H[j * cols + i] = h;
   }
 }
+
+// --- Fill the open cuts to the underground ----------------------------------------------------------------------------------
+// Candidates: nodes within a few metres of a way in a tunnel or below ground, outside the rivers and the lake (the
+// S-Bahn runs under the Sihl and the Limmat). A candidate is a pit when it lies 0.8 m or more under the median of the
+// ground 12-24 m around it (so the hills over real tunnels stay); pits are filled by harmonic interpolation from the
+// ground around them.
+const osm = JSON.parse(fs.readFileSync(path.join(DIR, 'data', 'cache', 'osm_zurich.json'), 'utf8'));
+const water = [];
+for (const e of osm.elements) {
+  const t = e.tags || {};
+  if (e.type === 'node' || !(t.natural === 'water' || /^(riverbank|dock)$/.test(t.waterway || ''))) continue;
+  for (const p of polygons(e)) water.push({ ...p, box: ringBox(p.ring) });
+}
+const pip = (ring, x, z) => {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    if ((ring[i][1] > z) !== (ring[j][1] > z) && x < ((ring[j][0] - ring[i][0]) * (z - ring[i][1])) / (ring[j][1] - ring[i][1]) + ring[i][0]) inside = !inside;
+  }
+  return inside;
+};
+const inWater = (x, z) => water.some((w) => x >= w.box.x0 && x <= w.box.x1 && z >= w.box.z0 && z <= w.box.z1 &&
+  pip(w.ring, x, z) && !w.holes.some((h) => pip(h, x, z)));
+const candidate = new Uint8Array(cols * rows);
+for (const e of osm.elements) {
+  const t = e.tags || {};
+  if (e.type !== 'way' || !e.geometry || !(t.highway || t.railway)) continue;
+  const below = (t.tunnel && t.tunnel !== 'no') || t.covered === 'yes' || t.location === 'underground' || parseFloat(t.layer) < 0;
+  if (!below || (t.bridge && t.bridge !== 'no')) continue;
+  const half = (parseFloat(t.width) || (t.railway ? 6 : t.highway === 'steps' || t.highway === 'footway' ? 3 : 8)) / 2 + 3;
+  const pts = e.geometry.map((p) => lonLatToWorld(p.lon, p.lat));
+  for (let k = 1; k < pts.length; k++) {
+    const a = pts[k - 1], b = pts[k], dx = b.x - a.x, dz = b.z - a.z, L2 = dx * dx + dz * dz || 1e-9;
+    const i0 = Math.max(0, Math.ceil((Math.min(a.x, b.x) - half - minX) / cell)), i1 = Math.min(cols - 1, Math.floor((Math.max(a.x, b.x) + half - minX) / cell));
+    const j0 = Math.max(0, Math.ceil((Math.min(a.z, b.z) - half - minZ) / cell)), j1 = Math.min(rows - 1, Math.floor((Math.max(a.z, b.z) + half - minZ) / cell));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const x = minX + i * cell, z = minZ + j * cell, f = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / L2));
+      if (!candidate[j * cols + i] && Math.hypot(a.x + f * dx - x, a.z + f * dz - z) <= half && !inWater(x, z)) candidate[j * cols + i] = 1;
+    }
+  }
+}
+const pit = new Uint8Array(cols * rows);
+let pits = 0;
+for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+  const k = j * cols + i;
+  if (!candidate[k]) continue;
+  const ring = [];
+  for (let dj = -6; dj <= 6; dj++) for (let di = -6; di <= 6; di++) {
+    const r = Math.hypot(di, dj) * cell, ii = i + di, jj = j + dj;
+    if (r >= 12 && r <= 24 && ii >= 0 && jj >= 0 && ii < cols && jj < rows && !candidate[jj * cols + ii]) ring.push(H[jj * cols + ii]);
+  }
+  if (ring.length < 8) continue;
+  ring.sort((p, q) => p - q);
+  if (H[k] < ring[ring.length >> 1] - 0.8) { pit[k] = 1; pits++; }
+}
+// Grow the pits by a node so that their slopes go too, then fill them
+const fill = Uint8Array.from(pit);
+for (let j = 1; j < rows - 1; j++) for (let i = 1; i < cols - 1; i++) {
+  const k = j * cols + i;
+  if (!pit[k] && candidate[k] && (pit[k - 1] || pit[k + 1] || pit[k - cols] || pit[k + cols])) fill[k] = 1;
+}
+const filled = [];
+for (let k = 0; k < fill.length; k++) if (fill[k]) filled.push(k);
+for (let iter = 0; iter < 400; iter++) {
+  for (const k of filled) {
+    const i = k % cols, j = (k - i) / cols;
+    let sum = 0, n = 0;
+    for (const nk of [i > 0 ? k - 1 : -1, i < cols - 1 ? k + 1 : -1, j > 0 ? k - cols : -1, j < rows - 1 ? k + cols : -1]) if (nk >= 0) { sum += H[nk]; n++; }
+    H[k] = Math.max(H[k], sum / n);
+  }
+}
+log(`filled ${filled.length} nodes of open cuts to the underground (${pits} pits)`);
+
+const heights = new Int16Array(cols * rows);
+for (let k = 0; k < heights.length; k++) heights[k] = Math.round((H[k] - FRAME.H0) / scale);
 const header = Buffer.alloc(24);
 header.write('ZTR1', 0, 'ascii');
 header.writeUInt16LE(cols, 4); header.writeUInt16LE(rows, 6);
