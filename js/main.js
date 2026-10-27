@@ -26,7 +26,7 @@ import { setupSceneCulling, updateSceneCulling } from './scene-culling.js';
 import { CityAudioSystem } from './audio-system.js';
 
 // Saved player state (localStorage 'slopzurich-player-state'); older versions are ignored
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;
 
 // js/main.js
 // Main entry point for Zürich in Three.js WebGPURenderer & TSL (three.js dev, see index.html)
@@ -146,7 +146,7 @@ async function initApp() {
   // 4. Initialize Third-Person Controllers (Person, Car, Cyclist, Cargo Bike, Helicopter) & Multi-Camera System
   const controllerManager = new ThirdPersonControllerManager(scene, allColliders);
   // Reuse teleport placement so saved players return at rest, close to their last positions. A first visit (or a save
-  // from before version 2) starts by bike on the Limmatquai (city-config.js defaultSpawn).
+  // from an older version) starts by bike at Bellevue (city-config.js defaultSpawn).
   let restored = false;
   try {
     const saved = JSON.parse(localStorage.getItem('slopzurich-player-state'));
