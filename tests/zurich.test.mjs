@@ -109,6 +109,15 @@ test('the Lindenhofstrasse bridge stands no pier on the Uraniastrasse under it',
   assert.equal(pierClear(...at(8)), true, 'between the bridgehead and the street');
 });
 
+test('the Lindenhofstrasse bridge and its sidewalks clear the Uraniastrasse', async () => {
+  const { groundHeight, deckHeight } = await import('../js/terrain.js');
+  // (its eastern sidewalk, mapped on its own, meets the street on the smeared top of the retaining wall)
+  for (let x = 199; x <= 215; x += 1) {
+    const d = deckHeight(x, 46);
+    assert.ok(d === d && d - groundHeight(x, 46) > 6, `x ${x}: deck ${d} over ${groundHeight(x, 46).toFixed(1)}`);
+  }
+});
+
 test('the city keeps its landmarks, quarters, trees and road graph', () => {
   for (const name of ['Grossmünster', 'Fraumünster', 'Zürich HB', 'ETH Hauptgebäude', 'Opernhaus', 'Prime Tower']) {
     assert.ok(ZURICH_DATA.landmarks[name], name);

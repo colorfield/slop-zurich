@@ -59,7 +59,7 @@ function noteLevel(e, pts, kept, record, bridge, tunnel) {
   const minor = MINOR.test(e.tags.highway || '');
   if (bridge) {
     const index = new Map(pts.map((p, i) => [p, i]));
-    deckWays.push({ record, nodes: e.nodes, pts, kept: kept.map((p) => index.get(p)), minor });
+    deckWays.push({ record, nodes: e.nodes, pts, kept: kept.map((p) => index.get(p)), minor, sidewalk: e.tags.footway === 'sidewalk' });
   } else if (!tunnel) for (const id of e.nodes) (minor ? minorGroundNodes : groundNodes).add(id);
 }
 const drivable = [];
@@ -268,12 +268,47 @@ const terrainPatches = []; // bridgeheads where the terrain must rise to the sur
     }
   }
   solve();
+  // Sidewalks mapped as bridge ways of their own (footway=sidewalk) carry on the deck of the carriageway they run along.
+  // Where they meet the sidewalk on the ground on top of a retaining wall, which the 2 m survey smears into a slope,
+  // they are anchored far below it (the Lindenhofstrasse's eastern sidewalk: 3.7 m at its end, against a deck at
+  // 10.6 m, a wall across the Uraniastrasse under it): their nodes take the carriageway's deck, where the surface model
+  // agrees (a sidewalk beside a deck on another level, under a viaduct, keeps its own).
+  const carriageways = [];
+  for (const way of deckWays) if (!way.minor) for (let i = 1; i < way.nodes.length; i++) carriageways.push([way.nodes[i - 1], way.nodes[i]]);
+  const deckAt = (id) => Math.max(h.get(id), ground(id));
+  const carriagewayDeck = ([x, z], ux, uz) => {
+    let best = Infinity, y = NaN;
+    for (const [a, b] of carriageways) {
+      const [ax, az] = pos.get(a), [bx, bz] = pos.get(b), dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz);
+      if (L < 1 || Math.abs(ux * dz - uz * dx) > 0.26 * L) continue;
+      const t = ((x - ax) * dx + (z - az) * dz) / (L * L);
+      if (t < -0.2 || t > 1.2) continue;
+      const tc = Math.max(0, Math.min(1, t)), d = Math.hypot(ax + tc * dx - x, az + tc * dz - z);
+      if (d < 12 && d < best) { best = d; y = deckAt(a) + tc * (deckAt(b) - deckAt(a)); }
+    }
+    return y;
+  };
+  let sidewalks = 0;
+  for (const way of deckWays) {
+    if (!way.sidewalk) continue;
+    let lifted = false;
+    way.nodes.forEach((id, i) => {
+      const j = i ? i - 1 : 1, [x, z] = way.pts[i], dx = x - way.pts[j][0], dz = z - way.pts[j][1], L = Math.hypot(dx, dz) || 1;
+      const y = carriagewayDeck(way.pts[i], dx / L, dz / L);
+      if (!(y - deckAt(id) > 1) || !(Math.abs(surveyed[id] - FRAME.H0 - y) < 1)) return;
+      // The ends of the sidewalk lie on the smeared wall top: the ground rises to meet them over a few metres
+      if ((i === 0 || i === way.nodes.length - 1) && anchored.has(id)) terrainPatches.push({ x: r1(x), z: r1(z), h: r2(y), r: 6 });
+      h.set(id, y);
+      lifted = true;
+    });
+    if (lifted) sidewalks++;
+  }
   const smooth = h;
   for (const way of deckWays) {
     // Decks never dip below the terrain they cross; heights in the world frame (above FRAME.H0)
     way.record.ys = way.kept.map((i) => r2(Math.max(smooth.get(way.nodes[i]), gridHeight(TERRAIN, way.pts[i][0], way.pts[i][1]))));
   }
-  log(`bridge decks: ${deckWays.length} ways, ${adj.size} nodes (${measured - rejected} surveyed, ${rejected} rejected samples, ${canopy} under trees), ${terrainPatches.length} bridgeheads raised`);
+  log(`bridge decks: ${deckWays.length} ways, ${adj.size} nodes (${measured - rejected} surveyed, ${rejected} rejected samples, ${canopy} under trees), ${terrainPatches.length} bridgeheads raised, ${sidewalks} sidewalks onto their carriageway's deck`);
 }
 
 // --- Quarters (Quartiere, OSM admin_level 10) -----------------------------------------------------------------------------
