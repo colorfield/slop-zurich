@@ -2533,7 +2533,10 @@ function createWaterMaterial() {
   const waveTex = getWaterWaveTexture();
   const harbourY = ISLAND_BOUNDS ? ISLAND_BOUNDS.waterLevel : -2.2;
   // Keep Berlin's existing water colour and wave mix when lowering its surface.
-  const pond = smoothstep(harbourY + 1.0, harbourY + 2.0, BERLIN_DATA ? float(-0.65) : positionWorld.y);
+  // When constant it is a uniform: Firefox's WGSL compiler (naga) rejects the all-constant expressions that a literal
+  // would make here and downstream (abstract types outside constant expressions)
+  const pondAt = (y) => { const t = Math.min(1, Math.max(0, (y - harbourY - 1.0) / 1.0)); return t * t * (3 - 2 * t); };
+  const pond = BERLIN_DATA ? uniform(pondAt(-0.65)) : smoothstep(harbourY + 1.0, harbourY + 2.0, positionWorld.y);
 
   // [tile size (m), rotation (rad), RMS slope]: incommensurate scales & angles so no pattern repeats
   const LAYERS = [
