@@ -381,6 +381,16 @@ async function initApp() {
     });
   }
 
+  // Data & credits: a native modal <dialog> (Esc and the × close it; so does a click on the backdrop)
+  const creditsDialog = document.getElementById('credits-dialog');
+  document.getElementById('btn-credits')?.addEventListener('click', () => creditsDialog.showModal());
+  creditsDialog?.addEventListener('click', (e) => {
+    if (e.target !== creditsDialog) return;
+    const r = creditsDialog.getBoundingClientRect();
+    const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    if (!inside) creditsDialog.close();
+  });
+
   // Popovers (native [popover]: light dismiss & Esc for free) open against the control that toggles them: data-anchor
   // names the element they sit above / below, data-align the one whose right edge they line up with
   const popovers = document.querySelectorAll('.popover[popover]');

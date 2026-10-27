@@ -313,6 +313,111 @@ body::after {
   bottom: var(--edge);
 }
 
+/* Data attribution: a map-style credit line in the gap under the bottom-right panels */
+.hud-attribution {
+  right: max(var(--edge), env(safe-area-inset-right));
+  bottom: 2px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-2);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+.hud-attribution a,
+.attribution-btn {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--text-3);
+}
+
+.attribution-btn {
+  padding: 0;
+  font: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.hud-attribution a:hover,
+.attribution-btn:hover {
+  color: var(--text);
+}
+
+.credits-dialog {
+  width: min(560px, calc(100% - 2 * var(--edge)));
+  max-height: calc(100% - 2 * var(--edge));
+  margin: auto;
+  padding: 18px 20px;
+  overflow-y: auto;
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.5;
+  background: var(--grain), var(--glass-strong);
+  -webkit-backdrop-filter: blur(26px) saturate(170%);
+  backdrop-filter: blur(26px) saturate(170%);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 28px 60px -22px rgba(0, 0, 0, 0.8);
+}
+
+.credits-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.credits-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.credits-head h2 {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.credits-close {
+  width: 30px;
+  height: 30px;
+  color: var(--text-2);
+  font-size: 20px;
+  line-height: 1;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.credits-close:hover {
+  color: var(--text);
+  background: var(--divider);
+}
+
+.credits-list {
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.credits-list li {
+  padding: 10px 0;
+  border-top: 1px solid var(--divider);
+}
+
+.credits-source {
+  color: var(--text-2);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+.credits-dialog a {
+  color: inherit;
+  text-underline-offset: 2px;
+}
+
 /* Clean view [H]: everything but the toggle itself steps out of the way */
 body.hud-minimized::before,
 body.hud-minimized::after {

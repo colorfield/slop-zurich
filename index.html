@@ -179,6 +179,41 @@
     <button id="tp-primetower" class="pop-item tp-btn" data-teleport="primetower" type="button"><span class="pop-name">Prime Tower</span><span class="pop-sub">Hardstrasse · Escher Wyss</span></button>
   </div>
 
+  <!-- Bottom edge: data attribution, always on screen (swisstopo terms, OSM attribution guidelines) -->
+  <div class="hud hud-attribution">
+    © swisstopo · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> · Stadt Zürich ·
+    <button id="btn-credits" class="attribution-btn" type="button">Data &amp; credits</button>
+  </div>
+
+  <dialog id="credits-dialog" class="credits-dialog" aria-labelledby="credits-title">
+    <div class="credits-head">
+      <h2 id="credits-title">Data &amp; credits</h2>
+      <form method="dialog"><button class="credits-close" type="submit" aria-label="Close">×</button></form>
+    </div>
+    <p>Slop Zürich is built from open government data and OpenStreetMap. It is an unofficial project, not affiliated with swisstopo or the City of Zürich.</p>
+    <ul class="credits-list">
+      <li>
+        <b>swissBUILDINGS3D 3.0</b>: buildings and roofs.<br>
+        <b>swissALTI3D</b>: the terrain.<br>
+        <b>swissSURFACE3D Raster</b>: the bridge decks.<br>
+        <span class="credits-source">© swisstopo, Federal Office of Topography swisstopo (<a href="https://www.swisstopo.admin.ch/de/nutzungsbedingungen-kostenlose-geodaten-und-geodienste" target="_blank" rel="noopener noreferrer">terms of use</a>)</span>
+      </li>
+      <li>
+        <b>swissALTIRegio</b>: the surroundings, out to the Alps.<br>
+        <span class="credits-source">Bundesamt für Landestopografie swisstopo; Tarquini S., I. Isola, M. Favalli, A. Battistini, G. Dotta (2023). TINITALY, a digital elevation model of Italy with a 10 meters cell size (Version 1.1). Istituto Nazionale di Geofisica e Vulcanologia (INGV). https://doi.org/10.13127/tinitaly/1.1; DGM Österreich, geoland.at; DGM1, Bayerische Vermessungsverwaltung – www.geodaten.bayern.de; DGM 1 Baden-Württemberg: LGL, www.lgl-bw.de, dl-de/by-2-0; RGEAlti, Institut National de l'information géographique et forestière, données originales téléchargées sur https://geoservices.ign.fr/rgealti#telechargement5m, mise à jour du juillet 2023</span>
+      </li>
+      <li>
+        <b>OpenStreetMap</b>: streets, tram and rail lines, building footprints, parks and water.<br>
+        <span class="credits-source">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>, Open Database License (ODbL)</span>
+      </li>
+      <li>
+        <b>Baumkataster</b>: the city trees.<br>
+        <span class="credits-source">Grün Stadt Zürich, <a href="https://data.stadt-zuerich.ch/dataset/geo_baumkataster" target="_blank" rel="noopener noreferrer">Open Government Data Stadt Zürich</a> (CC0)</span>
+      </li>
+    </ul>
+    <p class="credits-source">Code under the MIT License on <a href="https://github.com/colorfield/slop-zurich" target="_blank" rel="noopener noreferrer">GitHub</a>, after mrdoob's <a href="https://github.com/mrdoob/slop-newyork" target="_blank" rel="noopener noreferrer">Slop New York</a>. Built with <a href="https://threejs.org" target="_blank" rel="noopener noreferrer">three.js</a> (MIT).</p>
+  </dialog>
+
   <!-- Bottom-Left: Street-Name Signs & Live GPS Radar Minimap -->
   <div class="hud hud-bottom-left">
     <div id="hud-location" class="location" aria-live="off"></div>
