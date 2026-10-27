@@ -97,9 +97,9 @@ cameras, the shadows and the colliders query the same surface.
 
 ## Ideas
 
-- SWISSIMAGE orthophotos on the ground and the roofs.
-- The VBZ lines and timetables (GTFS) for the trams.
-- The Polybahn, the Dolderbahn and the lake boats.
+- SWISSIMAGE orthophotos on the ground and the roofs ([#2](https://github.com/colorfield/slop-zurich/issues/2)).
+- The VBZ lines and timetables (GTFS) for the trams ([#3](https://github.com/colorfield/slop-zurich/issues/3)).
+- The Polybahn, the Dolderbahn and the lake boats ([#4](https://github.com/colorfield/slop-zurich/issues/4)).
 
 ## License and data
 
