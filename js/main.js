@@ -9,6 +9,7 @@ import { buildBoroughs } from './boroughs.js';
 import { buildLandmarks } from './landmarks.js';
 import { buildCityBlocks } from './buildings.js';
 import { streamSwissBuildings } from './swissbuildings3d.js';
+import { buildSurroundings } from './surroundings.js';
 import { placeOnTerrain, liftColliders } from './terrain.js';
 import { FRAME } from './zurich-frame.js';
 import { buildStreetDetails } from './street-details.js';
@@ -84,6 +85,13 @@ async function initApp() {
   const flatWorld = new Set(scene.children);
   const cityGrid = buildCityGrid(scene);
   markInit('cityGrid');
+  // The relief around the city, out to the Alps (swissALTIRegio)
+  try {
+    await buildSurroundings(scene);
+  } catch (error) {
+    console.warn('[surroundings] the horizon stays empty:', error);
+  }
+  markInit('surroundings');
   const boroughs = buildBoroughs(scene, { sidewalks: cityGrid.sidewalks });
   markInit('boroughs');
   const { colliders: landmarkColliders } = buildLandmarks(scene);

@@ -21,6 +21,9 @@ Berlin and Warsaw forks and [Slop Utrecht](https://github.com/bertt/slop-utrecht
   so deck heights are sampled from **swissSURFACE3D Raster** at every bridge node, checked against the neighbouring
   nodes and interpolated along each bridge chain. The Hardbrücke spans the tracks ~12 m up; vehicles and pedestrians
   keep to the level they are on (over or under a bridge).
+- **The horizon**: the relief around the city from **swissALTIRegio** (10 m), in two rings stitched to the city's
+  terrain: ±12 km at 50 m (the Uetliberg, the Pfannenstiel, the rest of the lake) and ±91 km at 275 m (the Rigi, the
+  Pilatus, the Glarus Alps, the Säntis), lowered by the Earth's curvature, under a lighter haze than New York's.
 - **LV95 world frame**: 1 unit = 1 m, `x = E − 2683000`, `z = 1247700 − N`, `y = height − 406 m` (lake level). The
   WGS84 ↔ LV95 transformation (`js/swiss-projection.js`) matches swisstopo REFRAME to the millimetre.
 - **City of Zurich tree cadastre** (16,000 park and street trees, sized from their surveyed crowns), the official
@@ -40,7 +43,7 @@ A WebGPU-capable browser is needed (recent Chrome, Edge or Safari). The building
 
 ## Data
 
-The generated data is committed (`js/zurich-geodata.js`, `data/zurich-terrain.bin`,
+The generated data is committed (`js/zurich-geodata.js`, `data/zurich-terrain.bin`, `data/zurich-surroundings.bin`,
 `data/swissbuildings3d-tiles.json`); the raw downloads go to `tools/data/cache/` (not committed). To rebuild everything:
 
 ```sh
@@ -56,6 +59,7 @@ npm run data
 | `data:decks` | `tools/fetch-bridge-decks.mjs` | swisstopo swissSURFACE3D Raster (HTTP range reads around the bridges) |
 | `data:geo` | `tools/build-zurich-geodata.mjs` | all of the above → `js/zurich-geodata.js` |
 | `data:buildings` | `tools/build-swissbuildings3d-index.mjs` | swisstopo swissBUILDINGS3D 3.0 tileset → tile index |
+| `data:surroundings` | `tools/build-zurich-surroundings.mjs` | swisstopo swissALTIRegio (cloud-optimised GeoTIFF overviews) |
 
 The mapped area is LV95 E 2681100–2684900, N 1245800–1249600 (3.8 × 3.8 km), set in `js/zurich-frame.js`.
 
@@ -70,8 +74,6 @@ cameras, the shadows and the colliders query the same surface.
 
 ## Ideas
 
-- The relief beyond the mapped area (the Uetliberg, the Albis and the Alps on the horizon), from swissALTI3D at lower
-  resolution.
 - SWISSIMAGE orthophotos on the ground and the roofs.
 - The VBZ trams on their real tracks (OSM `railway=tram` is already in the data) and timetables (GTFS).
 - The Polybahn, the Dolderbahn and the lake boats.
@@ -80,7 +82,7 @@ cameras, the shadows and the colliders query the same surface.
 
 The code is available under the [MIT License](LICENSE).
 
-Data: © [swisstopo](https://www.swisstopo.admin.ch/) (swissBUILDINGS3D 3.0, swissALTI3D, swissSURFACE3D, open
+Data: © [swisstopo](https://www.swisstopo.admin.ch/) (swissBUILDINGS3D 3.0, swissALTI3D, swissSURFACE3D, swissALTIRegio, open
 government data), © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL),
 [Stadt Zürich](https://data.stadt-zuerich.ch/dataset/geo_baumkataster) open government data (Baumkataster). Third-party
 data and dependencies retain their respective licenses.

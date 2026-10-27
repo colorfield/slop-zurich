@@ -1,5 +1,9 @@
 import * as THREE from 'three/webgpu';
 import { groundHeight } from './terrain.js';
+
+// The presets' haze was tuned for New York's harbour air; over the Swiss plateau the Alps stand out 50-80 km away on a
+// clear day, so the aerial haze (which thins with altitude, see createAerialFogNode) is much lighter.
+const HAZE = 0.3;
 import {
   Fn,
   float,
@@ -227,7 +231,7 @@ class LightingSystem {
     // Sky-matched aerial perspective (replaces the flat FogExp2 colour): distant surfaces fade into the baked sky
     // radiance just above the horizon in their view direction (sun glow included), through an exponential haze layer
     // so helicopter / observatory views stay clearer than the horizon.
-    this.uFogDensity = uniform(TIME_PRESETS.golden.fogDensity);
+    this.uFogDensity = uniform(TIME_PRESETS.golden.fogDensity * HAZE);
     this.uFogHeight = uniform(900.0);
     if (this.envRenderTarget) this.scene.fogNode = this.createAerialFogNode();
   }
@@ -282,7 +286,7 @@ class LightingSystem {
 
     this.scene.fog.color.setHex(p.fogColor);
     this.scene.fog.density = p.fogDensity;
-    if (this.uFogDensity) this.uFogDensity.value = p.fogDensity;
+    if (this.uFogDensity) this.uFogDensity.value = p.fogDensity * HAZE;
 
     // Update physical Preetham SkyMesh uniforms
     this.sky.turbidity.value = p.turbidity;

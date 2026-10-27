@@ -44,7 +44,7 @@ class CameraSystem {
       56,
       window.innerWidth / window.innerHeight,
       0.35,
-      60000 // at 1:1 the boroughs & harbor run out ~20-40 km to the fogged horizon (reversed float depth keeps precision)
+      200000 // the Alps stand 50-90 km away on the horizon (reversed float depth keeps precision)
     );
 
     this.activePresetId = 'chase';

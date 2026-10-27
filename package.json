@@ -12,7 +12,8 @@
     "data:decks": "node tools/fetch-bridge-decks.mjs",
     "data:geo": "node tools/build-zurich-geodata.mjs",
     "data:buildings": "node tools/build-swissbuildings3d-index.mjs",
-    "data": "npm run data:osm && npm run data:areas && npm run data:trees && npm run data:terrain && npm run data:decks && npm run data:geo && npm run data:buildings",
+    "data:surroundings": "node tools/build-zurich-surroundings.mjs",
+    "data": "npm run data:osm && npm run data:areas && npm run data:trees && npm run data:terrain && npm run data:decks && npm run data:geo && npm run data:buildings && npm run data:surroundings",
     "serve": "python3 -m http.server 8765 --bind 127.0.0.1",
     "test": "node --test tests/*.cjs tests/*.mjs"
   },
