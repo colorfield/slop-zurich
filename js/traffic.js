@@ -620,6 +620,27 @@ function createTrafficSystem(scene, sidewalks, obstacles, signalIntersections) {
     v.pSpeed = Math.max(0, player.vx * fx + player.vz * fz);
   }
 
+  // The trams' sections (trams.js), solid bodies the traffic brakes behind and bounces off
+  let tramBodies = [];
+  // Gap to the nearest tram section ahead in v's lane (v._tramSpeed: how fast it moves v's way)
+  function tramGap(v) {
+    let gap = Infinity;
+    const fx = Math.sin(v.yaw), fz = Math.cos(v.yaw);
+    for (const b of tramBodies) {
+      const dx = b.x - v.x, dz = b.z - v.z;
+      if (Math.abs(dx) > LOOKAHEAD + 10 || Math.abs(dz) > LOOKAHEAD + 10) continue;
+      const ahead = dx * fx + dz * fz;
+      if (ahead < 0 || ahead > LOOKAHEAD) continue;
+      // the section's extent along and across v's heading
+      const along = b.halfL * Math.abs(b.sin * fx + b.cos * fz) + b.halfW * Math.abs(b.cos * fx - b.sin * fz);
+      const across = b.halfL * Math.abs(b.sin * fz - b.cos * fx) + b.halfW * Math.abs(b.cos * fz + b.sin * fx);
+      if (Math.abs(dz * fx - dx * fz) > v.halfWidth + across + 0.3) continue;
+      const g = ahead - v.half - along;
+      if (g < gap) { gap = g; v._tramSpeed = Math.max(0, b.vx * fx + b.vz * fz); }
+    }
+    return gap;
+  }
+
   // Gap to the player if it is ahead in the lane whose centre is `off` metres to the right of v
   function playerGap(v, off) {
     if (v.pAhead < 0 || v.pAhead > LOOKAHEAD) return Infinity;
@@ -1072,6 +1093,14 @@ function createTrafficSystem(scene, sidewalks, obstacles, signalIntersections) {
         v.leaderSpeed = v.pSpeed;
       }
     }
+    const tg = tramBodies.length ? tramGap(v) : Infinity;
+    if (tg < LOOKAHEAD) {
+      worst = Math.min(worst, brake(v, Math.max(0.1, tg), v._tramSpeed));
+      if (tg < v.gap) {
+        v.gap = tg;
+        v.leaderSpeed = v._tramSpeed;
+      }
+    }
     const acc = Math.min(freeAcc(v) + worst, (cap - v.speed) * 2);
     v.acc = clamp(acc, -9, v.driver.a);
   }
@@ -1302,6 +1331,26 @@ function createTrafficSystem(scene, sidewalks, obstacles, signalIntersections) {
     impactSuspension(v, -hit.nx, -hit.nz, hit.impulse / b.mass);
     if (pe.type !== 'person') reportCollision(pe, v, hit.x, 0.58, hit.z, hit.nx, hit.nz, speed);
     if (speed > 2.2) spawnCollisionSparks(hit.x, 0.58, hit.z, hit.nx, hit.nz, speed);
+  }
+
+  // Vehicles touching a tram section are pushed clear of it (a tram does not give way)
+  function collideWithTrams() {
+    for (const v of vehicles) {
+      if (!v.edge) continue;
+      for (const b of tramBodies) {
+        const reach = v.half + b.halfL + b.halfW;
+        if (Math.abs(v.x - b.x) > reach || Math.abs(v.z - b.z) > reach) continue;
+        readTrafficBody(v, contactA);
+        const hit = vehicleHit;
+        if (!vehicleContact(contactA, b, hit)) continue;
+        const speed = resolveVehicleContact(contactA, b, hit);
+        shove(v, hit.nx * hit.depth, hit.nz * hit.depth);
+        if (speed <= 0) continue;
+        writeTrafficVelocity(v, contactA);
+        impactSuspension(v, hit.nx, hit.nz, hit.impulse / contactA.mass);
+        reportCollision(v, b, hit.x, 0.56, hit.z, hit.nx, hit.nz, speed);
+      }
+    }
   }
 
   // Only disturbed traffic needs pair contacts. Newly struck cars join the same
@@ -1792,6 +1841,7 @@ function createTrafficSystem(scene, sidewalks, obstacles, signalIntersections) {
     if (player.active) {
       for (const v of vehicles) if (v.edge) collideWithPlayer(v);
     }
+    if (tramBodies.length) collideWithTrams();
     collideTraffic();
     for (const v of vehicles) {
       if (!v.edge) continue;
@@ -1862,6 +1912,7 @@ function createTrafficSystem(scene, sidewalks, obstacles, signalIntersections) {
     group,
     update,
     setCollisionListener,
+    setTramBodies(bodies) { tramBodies = bodies; },
     cars,
     buses,
     bikes,

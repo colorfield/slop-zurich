@@ -135,6 +135,7 @@ async function initApp() {
     ...allColliders.filter((c) => !c.obb && (c.minY ?? 0) - (c.baseY ?? 0) < 3.5)
   ], streetDetails.signalIntersections);
   markInit('traffic');
+  trafficSystem.setTramBodies(trams.bodies);
   const highwayTraffic = createHighwayTraffic(scene, cityGrid.highwayLanes);
   const beforePaint = new Set(scene.children);
   buildRoadPaint(scene, trafficSystem.network);
@@ -734,7 +735,8 @@ async function initApp() {
       cameraSystem.camera
     );
     highwayTraffic.update(dt, cameraSystem.camera, controllerManager.getActiveEntity(), controllerManager.activeMode);
-    trams.update(dt);
+    trams.update(dt, { vehicles: [trafficSystem.cars, trafficSystem.buses, trafficSystem.bikes], player: controllerManager.getActiveEntity().position });
+    trams.collidePlayer(controllerManager.getActiveEntity(), controllerManager.activeMode, controllerManager);
     if (!document.hidden && now >= nextPlayerSave) {
       savePlayerState();
       nextPlayerSave = now + 5000;

@@ -3,17 +3,20 @@ import { float, mix, mx_noise_float, normalGeometry, positionGeometry, positionW
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ZURICH_DATA } from './zurich-geodata.js';
 import { drapeOverlay, surfaceHeight, ROAD_TOP } from './terrain.js';
+import { vehicleContact, resolveVehicleContact, sweptVehicleContact } from './vehicle-physics.js';
 
 // Zurich's tracks and trams (OSM railway=tram / rail in js/zurich-geodata.js):
 //  - the rails of the VBZ's metre-gauge tram network in the streets, and the SBB's standard-gauge lines on their
 //    ballast (the HB's track field, the lines to Oerlikon and Enge), laid on the terrain or the bridge decks;
 //  - blue and white articulated trams (five ~7 m sections, each following the track, so a tram bends through the
 //    curves) running on the right-hand track of double lines (the direction of a track is inferred from the parallel
-//    one), stopping at the tram stops and keeping their distance.
+//    one), stopping at the tram stops, keeping their distance and braking for whatever stands on the track ahead;
+//  - every section is a solid body: the player bounces off them, and the traffic (traffic.js) brakes behind them.
 
 const TRAM_SECTIONS = 5, SECTION = 7.3, GAP = 0.25, PITCH = SECTION + GAP; // ~37 m, like a Flexity
 const TRAM_COUNT = 40;
 const MAX_SPEED = 13, ACCEL = 1.1, BRAKE = 1.4, HEADWAY = 18, DWELL = [12, 22];
+const HALF_WIDTH = 1.2, TRAM_MASS = 4e4 / TRAM_SECTIONS, CLEARANCE = 1.7, STOP_SHORT = 4;
 
 // --- Track network ---------------------------------------------------------------------------------------------------------
 function polyline(flat) {
@@ -199,7 +202,7 @@ export function buildTrams(scene) {
   // A tram somewhere on the network, its sections following the front's trail (laid straight along the way to start)
   function place(t) {
     const way = pickWay();
-    Object.assign(t, { way, dir: way.dirs || (rand() < 0.5 ? 1 : -1), s: way.len * (0.2 + rand() * 0.6), speed: MAX_SPEED * 0.5, dwell: 0, served: null, trail: [], y: undefined });
+    Object.assign(t, { way, dir: way.dirs || (rand() < 0.5 ? 1 : -1), s: way.len * (0.2 + rand() * 0.6), speed: MAX_SPEED * 0.5, dwell: 0, served: null, trail: [], y: undefined, waiting: 0 });
     const p = pointAt(way, t.s, {});
     for (let d = PITCH * TRAM_SECTIONS + 2; d >= 0; d -= 1) t.trail.push({ x: p.x - p.dx * t.dir * d, z: p.z - p.dz * t.dir * d });
     return t;
@@ -218,7 +221,28 @@ export function buildTrams(scene) {
     return out;
   }
 
-  function update(dt) {
+  // One oriented box per section, for collisions (refreshed every frame)
+  const bodies = Array.from({ length: TRAM_COUNT * TRAM_SECTIONS }, () => ({
+    x: 0, z: 0, prevX: 0, prevZ: 0, y: 0, sin: 0, cos: 1, halfW: HALF_WIDTH, halfL: SECTION / 2, mass: TRAM_MASS, vx: 0, vz: 0, angularVel: 0, tram: true
+  }));
+
+  // Distance to the nearest obstacle on the track ahead of the tram's front (straight-line look-ahead): the player and
+  // the traffic (`obstacles`: lists of { x, z } and the player's position)
+  function obstacleAhead(t, obstacles) {
+    const f = pointAt(t.way, t.s, {}), fx = f.dx * t.dir, fz = f.dz * t.dir;
+    let nearest = Infinity;
+    const test = (p) => {
+      const dx = p.x - f.x, dz = p.z - f.z;
+      if (Math.abs(dx) > 50 || Math.abs(dz) > 50) return;
+      const ahead = dx * fx + dz * fz;
+      if (ahead > 0 && ahead < 45 && Math.abs(dz * fx - dx * fz) < CLEARANCE && ahead < nearest) nearest = ahead;
+    };
+    for (const list of obstacles.vehicles || []) for (const v of list) if (v.edge) test(v);
+    if (obstacles.player) test(obstacles.player);
+    return nearest;
+  }
+
+  function update(dt, obstacles = {}) {
     for (const t of trams) {
       // Next stop ahead on this way, and the tram ahead on the same track
       const ahead = t.way.stops.filter((s) => (s - t.s) * t.dir > 0.5 && s !== t.served).map((s) => Math.abs(s - t.s));
@@ -229,6 +253,12 @@ export function buildTrams(scene) {
         const gap = (o.s - t.s) * t.dir - PITCH * TRAM_SECTIONS;
         if (gap > -PITCH * TRAM_SECTIONS && gap < 200) limit = Math.min(limit, Math.sqrt(2 * BRAKE * Math.max(0, gap - HEADWAY)));
       }
+      // Brake for whatever stands on the track; after 15 s at a standstill (a car facing it on a shared lane, which
+      // waits for the tram in turn) carry on: the collision pushes the car aside
+      const blocked = obstacleAhead(t, obstacles);
+      if (blocked === Infinity) t.waiting = 0;
+      else if (t.speed < 0.3 || t.waiting >= 15) t.waiting += dt;
+      if (blocked < Infinity && t.waiting < 15) limit = Math.min(limit, Math.sqrt(2 * BRAKE * 2 * Math.max(0, blocked - STOP_SHORT)));
       if (t.dwell > 0) { t.dwell -= dt; t.speed = 0; continue; }
       t.speed = t.speed < limit ? Math.min(limit, t.speed + ACCEL * dt) : Math.max(limit, t.speed - BRAKE * 2 * dt);
       if (ahead.length && Math.min(...ahead) < 0.8 && t.speed < 0.3) {
@@ -264,7 +294,13 @@ export function buildTrams(scene) {
         const cx = (a.x + b.x) / 2, cz = (a.z + b.z) / 2;
         const ya = surfaceHeight(a.x, a.z, t.y), yb = surfaceHeight(b.x, b.z, t.y);
         if (n === 0) t.y = ya;
-        euler.set(Math.atan2(yb - ya, SECTION), Math.atan2(a.x - b.x, a.z - b.z), 0);
+        const yaw = Math.atan2(a.x - b.x, a.z - b.z);
+        euler.set(Math.atan2(yb - ya, SECTION), yaw, 0);
+        const body = bodies[k];
+        body.prevX = body.x; body.prevZ = body.z;
+        body.x = cx; body.z = cz; body.y = (ya + yb) / 2;
+        body.sin = Math.sin(yaw); body.cos = Math.cos(yaw);
+        body.vx = body.sin * t.speed; body.vz = body.cos * t.speed;
         sections.setMatrixAt(k++, m.compose(pos.set(cx, (ya + yb) / 2 + ROAD_TOP + 0.015, cz), q.setFromEuler(euler), scale)); // on the rails' heads
       }
     }
@@ -272,6 +308,38 @@ export function buildTrams(scene) {
     sections.instanceMatrix.needsUpdate = true;
   }
   update(0);
+  for (const b of bodies) { b.prevX = b.x; b.prevZ = b.z; }
+
+  // The player against the sections: a tram does not give way, so the player takes the whole correction
+  const contact = {}, playerBody = { x: 0, z: 0, prevX: 0, prevZ: 0, sin: 0, cos: 1, halfW: 0, halfL: 0, mass: 0, vx: 0, vz: 0, angularVel: 0 };
+  function collidePlayer(pe, mode, controllers) {
+    if (!pe || mode === 'helicopter') return;
+    const halfW = mode === 'cargobike' ? 0.38 : mode === 'cyclist' ? 0.35 : mode === 'person' ? 0.32 : 0.86;
+    const halfL = mode === 'cargobike' ? 1.34 : mode === 'cyclist' ? 0.85 : mode === 'person' ? 0.32 : 2.18;
+    const reach = SECTION / 2 + halfL + HALF_WIDTH;
+    for (const b of bodies) {
+      if (Math.abs(pe.position.x - b.x) > reach + 2 || Math.abs(pe.position.z - b.z) > reach + 2) continue;
+      if (pe.position.y > b.y + 3.6 || pe.position.y < b.y - 2) continue;
+      const a = playerBody, heading = pe.heading || 0;
+      a.x = pe.position.x; a.z = pe.position.z;
+      a.prevX = pe.prevX ?? a.x; a.prevZ = pe.prevZ ?? a.z;
+      a.sin = Math.sin(heading); a.cos = Math.cos(heading);
+      a.halfW = halfW; a.halfL = halfL;
+      a.mass = mode === 'car' ? 1700 : mode === 'cargobike' ? 140 : mode === 'cyclist' ? 95 : 80;
+      a.vx = a.sin * (pe.speed || 0) + (pe.vx || 0);
+      a.vz = a.cos * (pe.speed || 0) + (pe.vz || 0);
+      a.angularVel = mode === 'car' ? pe.angularVel || 0 : 0;
+      if (!sweptVehicleContact(a, b, contact) && !vehicleContact(a, b, contact)) continue;
+      const speed = resolveVehicleContact(a, b, contact);
+      pe.position.x = contact.ax + contact.nx * contact.depth;
+      pe.position.z = contact.az + contact.nz * contact.depth;
+      if (speed <= 0) continue;
+      pe.speed = a.vx * a.sin + a.vz * a.cos;
+      if (mode === 'car') { pe.vx = a.vx - a.sin * pe.speed; pe.vz = a.vz - a.cos * pe.speed; pe.angularVel = a.angularVel; }
+      if (mode !== 'person') controllers?.reportCollision(pe, b, 'vehicle', contact.x, b.y + 0.6, contact.z, contact.nx, 0, contact.nz, speed);
+    }
+  }
+
   group.userData.stats = { trams: TRAM_COUNT, ways: ways.length, stops: ways.reduce((a, w) => a + w.stops.length, 0) };
-  return { group, update, trams };
+  return { group, update, collidePlayer, bodies, trams };
 }
