@@ -4,7 +4,7 @@ A simulation of Zurich's inner city built with [three.js](https://threejs.org/),
 Altstadt, the Limmat, the Bahnhofstrasse, the lake front, the ETH terrace and Zurich-West on foot, by car, by bicycle
 or cargo bike, or by helicopter, at 1:1 and **on the real relief**.
 
-[Try it live](https://zurich.pocketswitzerland.com/)
+[Try it live](https://zurich.pocketswitzerland.ch/)
 
 Based on [Slop New York](https://github.com/mrdoob/slop-newyork) by mrdoob, through the irregular-city data path of the
 Berlin and Warsaw forks and [Slop Utrecht](https://github.com/bertt/slop-utrecht) by bertt. More cities in
@@ -49,7 +49,7 @@ A WebGPU-capable browser is needed (recent Chrome, Edge or Safari).
 
 ## Publish
 
-The site is static, with relative paths, so it runs from a domain root (https://zurich.pocketswitzerland.com/, the
+The site is static, with relative paths, so it runs from a domain root (https://zurich.pocketswitzerland.ch/, the
 custom domain set in the repository's Pages settings) or any sub-path such as `https://<user>.github.io/slop-zurich/`.
 `.github/workflows/pages.yml` runs the tests on every push to `main`, then publishes `index.html`, `css`, `js`,
 `assets` and `data` (about 72 MB) to GitHub Pages. In the repository settings, set **Pages > Build and deployment >
