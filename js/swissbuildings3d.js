@@ -6,14 +6,15 @@ import { FRAME } from './zurich-frame.js';
 import { ecefToLv95 } from './swiss-projection.js';
 
 // swisstopo swissBUILDINGS3D 3.0: every building of Switzerland with its real roof, as 3D Tiles 1.0 (b3dm with Draco
-// glTF, georeferenced in WGS84 ECEF). The tiles overlapping the city are listed by tools/build-swissbuildings3d-index.mjs
-// in data/swissbuildings3d-tiles.json; they stream in nearest first and are baked into engine coordinates:
+// glTF, georeferenced in WGS84 ECEF). The tiles overlapping the city are stored in data/swissbuildings3d/ (refreshed
+// deliberately from 3d.geo.admin.ch by tools/update-swissbuildings3d.mjs); they stream in nearest first and are baked
+// into engine coordinates:
 //   x = LV95 east - E0, z = N0 - LV95 north, y = height a.s.l. - H0 (js/zurich-frame.js).
 // Each tile gets an exact local affine map (the Jacobian of the rigorous ECEF -> LV95 transformation at its centre: a
 // tile spans ~100 m, so the residual is far below a millimetre). Heights come out above the Bessel ellipsoid; the batch
 // table's surveyed roof tops (DACH_MAX, metres a.s.l.) calibrate each tile to orthometric heights without a geoid model.
 
-const INDEX_URL = new URL('../data/swissbuildings3d-tiles.json', import.meta.url);
+const INDEX_URL = new URL('../data/swissbuildings3d/index.json', import.meta.url);
 
 // --- b3dm container ----------------------------------------------------------------------------------------------------
 export function parseB3dm(buffer) {
@@ -218,6 +219,7 @@ export function streamSwissBuildings(scene, { center = { x: 0, z: 0 }, nearRadiu
   const ready = new Promise((res, rej) => { resolveReady = res; rejectReady = rej; });
   const done = (async () => {
     const index = await (await fetch(INDEX_URL)).json();
+    const base = new URL(index.base, INDEX_URL);
     const tiles = index.tiles.map((t, i) => ({ ...t, seed: i * 977, d: Math.hypot(t.x - center.x, t.z - center.z) })).sort((a, b) => a.d - b.d);
     const near = tiles.filter((t) => t.d <= nearRadius).length || Math.min(tiles.length, 12);
     let next = 0, loaded = 0, settled = 0;
@@ -230,7 +232,7 @@ export function streamSwissBuildings(scene, { center = { x: 0, z: 0 }, nearRadiu
       while (next < tiles.length) {
         const t = tiles[next++];
         try {
-          const tile = parseB3dm(await fetchBuffer(index.base + t.u));
+          const tile = parseB3dm(await fetchBuffer(new URL(t.u, base)));
           const gltf = await loaderFor().parseAsync(tile.glb, '');
           const geometry = bakeTile(gltf, { ...tile, seed: t.seed }, stats);
           if (geometry) {

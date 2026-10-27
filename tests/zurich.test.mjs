@@ -63,3 +63,15 @@ test('the city keeps its landmarks, quarters, trees and road graph', () => {
   for (const l of links) assert.ok(l[0] * 2 < nodes.length && l[1] * 2 < nodes.length);
   assert.ok(!ZURICH_DATA.roads.some((r) => r.kind === 'footway' && /crossing/.test(r.name)), 'no crosswalk ways');
 });
+
+test('the swissBUILDINGS3D tiles are stored in the repository, complete', () => {
+  const dir = new URL('../data/swissbuildings3d/', import.meta.url);
+  const index = JSON.parse(fs.readFileSync(new URL('index.json', dir), 'utf8'));
+  assert.match(index.release, /^\d{8}$/);
+  assert.ok(index.tiles.length > 500);
+  for (const t of index.tiles) {
+    const buf = fs.readFileSync(new URL(index.base + t.u, dir));
+    assert.equal(buf.toString('ascii', 0, 4), 'b3dm', t.u);
+    assert.equal(buf.readUInt32LE(8), buf.length, `${t.u} is complete`);
+  }
+});
