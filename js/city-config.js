@@ -188,9 +188,15 @@ function nearestDrivingPoint(x,z,name=null){
 }
 function arrivalAt(p,name=null){const q=nearestDrivingPoint(p.x,p.z,name)||(name&&nearestDrivingPoint(p.x,p.z));return q?{x:q.x,z:q.z,heading:q.heading}:{...p,heading:0};}
 function arrival(lon,lat,name=null){return arrivalAt(projectLonLat(lon,lat),name);}
-const spawnPoint=lv95ToWorld(2683261,1247919);
-const defaultSpawn=arrivalAt(spawnPoint,'Bahnhofquai');
-defaultSpawn.x-=Math.cos(defaultSpawn.heading)*1.8;defaultSpawn.z+=Math.sin(defaultSpawn.heading)*1.8;defaultSpawn.name='Bahnhofquai';
+// The start: on the Limmatquai below the Rathaus, upstream towards the Grossmünster's towers, the Limmat on the right
+// and the Fraumünster across it
+const spawnPoint=lv95ToWorld(2683405,1247300);
+const defaultSpawn=arrivalAt(spawnPoint,'Limmatquai');
+{
+ const gm=LANDMARK_SITES['Grossmünster'];
+ if(gm&&(gm.x-defaultSpawn.x)*Math.sin(defaultSpawn.heading)+(gm.z-defaultSpawn.z)*Math.cos(defaultSpawn.heading)<0)defaultSpawn.heading+=Math.PI;
+}
+defaultSpawn.x-=Math.cos(defaultSpawn.heading)*1.8;defaultSpawn.z+=Math.sin(defaultSpawn.heading)*1.8;defaultSpawn.name='Limmatquai';
 // Legacy material code samples ordered district bands through streetZ; keep distinct thresholds.
 const streetZ=(n=37)=>defaultSpawn.z+(37-Number(n))*25;
 // Teleport destinations: [id, name, short label, LV95 east, LV95 north, quarter, street to arrive on, mapped landmark

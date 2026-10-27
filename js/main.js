@@ -25,6 +25,9 @@ import { NYCMapSystem } from './nyc-map.js';
 import { setupSceneCulling, updateSceneCulling } from './scene-culling.js';
 import { CityAudioSystem } from './audio-system.js';
 
+// Saved player state (localStorage 'slopzurich-player-state'); older versions are ignored
+const SAVE_VERSION = 2;
+
 // js/main.js
 // Main entry point for Zürich in Three.js WebGPURenderer & TSL (three.js dev, see index.html)
 
@@ -104,7 +107,7 @@ async function initApp() {
   let swissBuildings = null;
   let swissStream = null;
   try {
-    const savedSpawn = (() => { try { const s = JSON.parse(localStorage.getItem('slopzurich-player-state')); return s?.entities?.[s.activeMode]; } catch { return null; } })();
+    const savedSpawn = (() => { try { const s = JSON.parse(localStorage.getItem('slopzurich-player-state')); return s?.version === SAVE_VERSION ? s.entities?.[s.activeMode] : null; } catch { return null; } })();
     const stream = swissStream = streamSwissBuildings(scene, {
       center: Number.isFinite(savedSpawn?.x) ? savedSpawn : defaultSpawn,
       onProgress: (done, total) => { if (loadingStatus && !swissBuildings) loadingStatus.textContent = `Loading swissBUILDINGS3D ${done}/${total}…`; }
@@ -141,26 +144,30 @@ async function initApp() {
 
   // 4. Initialize Third-Person Controllers (Person, Car, Cyclist, Cargo Bike, Helicopter) & Multi-Camera System
   const controllerManager = new ThirdPersonControllerManager(scene, allColliders);
-  // Reuse teleport placement so saved players return at rest, close to their last positions.
+  // Reuse teleport placement so saved players return at rest, close to their last positions. A first visit (or a save
+  // from before version 2) starts by bike on the Limmatquai (city-config.js defaultSpawn).
+  let restored = false;
   try {
     const saved = JSON.parse(localStorage.getItem('slopzurich-player-state'));
-    if (saved?.version === 1) {
+    if (saved?.version === SAVE_VERSION) {
+      restored = true;
       for (const mode of Object.keys(controllerManager.entities)) {
         const p = saved.entities?.[mode];
         if (!p || ![p.x, p.y, p.z, p.heading].every(Number.isFinite)) continue;
         controllerManager.setMode(mode);
         controllerManager.teleportActiveTo(p.x, p.z, p.heading, p.y);
       }
-      controllerManager.setMode(Object.hasOwn(controllerManager.entities, saved.activeMode) ? saved.activeMode : 'car');
+      controllerManager.setMode(Object.hasOwn(controllerManager.entities, saved.activeMode) ? saved.activeMode : 'cyclist');
     }
   } catch { /* Missing or unavailable storage does not prevent playing. */ }
+  if (!restored) controllerManager.setMode('cyclist');
 
   function savePlayerState() {
     try {
       const entities = Object.fromEntries(Object.entries(controllerManager.entities).map(([mode, entity]) => [mode, {
         x: entity.position.x, y: entity.position.y, z: entity.position.z, heading: entity.heading
       }]));
-      localStorage.setItem('slopzurich-player-state', JSON.stringify({ version: 1, activeMode: controllerManager.activeMode, entities }));
+      localStorage.setItem('slopzurich-player-state', JSON.stringify({ version: SAVE_VERSION, activeMode: controllerManager.activeMode, entities }));
     } catch { /* Storage may be disabled or full. */ }
   }
 
