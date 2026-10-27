@@ -10,10 +10,11 @@ Berlin and Warsaw forks and [Slop Utrecht](https://github.com/bertt/slop-utrecht
 
 ## What makes it Zurich
 
-- **swisstopo swissBUILDINGS3D 3.0**: every building with its real roof, streamed as 3D Tiles (b3dm, Draco) straight
-  from `3d.geo.admin.ch`, nearest first. Each tile gets an exact local affine map from the rigorous ECEF → LV95
-  transformation, and its heights are calibrated on the surveyed roof tops (`DACH_MAX`) rather than on a geoid model.
-  The OSM footprints remain as colliders and as the fallback when the tiles can't be reached.
+- **swisstopo swissBUILDINGS3D 3.0**: every building with its real roof, from the 3D Tiles (b3dm, Draco) of
+  `3d.geo.admin.ch` stored in the repository and streamed into the scene nearest first. Each tile gets an exact local
+  affine map from the rigorous ECEF → LV95 transformation, and its heights are calibrated on the surveyed roof tops
+  (`DACH_MAX`) rather than on a geoid model. The OSM footprints remain as colliders and as the fallback when the
+  tiles can't be loaded.
 - **swisstopo swissALTI3D**: the terrain model (2 m, resampled to a 4 m grid) under everything: streets, parks,
   rivers, quays and the slopes of the Zürichberg. Cars pitch and roll with the streets, pedestrians' feet find the
   ground, the helicopter's floor is the relief.
@@ -39,12 +40,19 @@ npm run serve          # python3 -m http.server 8765 → http://127.0.0.1:8765/
 npm install && npm test
 ```
 
-A WebGPU-capable browser is needed (recent Chrome, Edge or Safari). The buildings stream from swisstopo at start.
+A WebGPU-capable browser is needed (recent Chrome, Edge or Safari).
+
+## Publish
+
+The site is static, with relative paths, so it runs from any sub-path such as `https://<user>.github.io/slop-zurich/`.
+`.github/workflows/pages.yml` runs the tests on every push to `main`, then publishes `index.html`, `css`, `js`,
+`assets` and `data` (about 72 MB) to GitHub Pages. In the repository settings, set **Pages > Build and deployment >
+Source** to **GitHub Actions**.
 
 ## Data
 
 The generated data is committed (`js/zurich-geodata.js`, `data/zurich-terrain.bin`, `data/zurich-surroundings.bin`,
-`data/swissbuildings3d-tiles.json`); the raw downloads go to `tools/data/cache/` (not committed). To rebuild everything:
+`data/swissbuildings3d/`); the raw downloads go to `tools/data/cache/` (not committed). To rebuild everything:
 
 ```sh
 npm install
@@ -58,8 +66,16 @@ npm run data
 | `data:terrain` | `tools/build-zurich-terrain.mjs` | swisstopo swissALTI3D (STAC, cloud-optimised GeoTIFF) |
 | `data:decks` | `tools/fetch-bridge-decks.mjs` | swisstopo swissSURFACE3D Raster (HTTP range reads around the bridges) |
 | `data:geo` | `tools/build-zurich-geodata.mjs` | all of the above → `js/zurich-geodata.js` |
-| `data:buildings` | `tools/build-swissbuildings3d-index.mjs` | swisstopo swissBUILDINGS3D 3.0 tileset → tile index |
 | `data:surroundings` | `tools/build-zurich-surroundings.mjs` | swisstopo swissALTIRegio (cloud-optimised GeoTIFF overviews) |
+
+The buildings are a copy of one swissBUILDINGS3D release (`data/swissbuildings3d/index.json` names it), so the game
+never depends on swisstopo's servers. Moving to a newer release is deliberate:
+
+```sh
+npm run update:buildings   # tools/update-swissbuildings3d.mjs: the newest release's tiles over the city (~56 MB)
+```
+
+It downloads and checks every tile before replacing the stored copy; look at the city, then commit.
 
 The mapped area is LV95 E 2681100–2684900, N 1245800–1249600 (3.8 × 3.8 km), set in `js/zurich-frame.js`.
 
