@@ -1,0 +1,22 @@
+{
+  "name": "slop-zurich",
+  "private": true,
+  "type": "module",
+  "description": "A Zurich city simulation built with three.js, WebGPURenderer and TSL, from swisstopo and OpenStreetMap data.",
+  "license": "MIT",
+  "scripts": {
+    "data:osm": "bash tools/overpass.sh tools/data/cache/osm_zurich.json tools/data/q_zurich.overpassql",
+    "data:trees": "node tools/fetch-zurich-trees.mjs",
+    "data:areas": "bash tools/overpass.sh tools/data/cache/osm_zurich_areas.json tools/data/q_zurich_areas.overpassql",
+    "data:terrain": "node tools/build-zurich-terrain.mjs",
+    "data:decks": "node tools/fetch-bridge-decks.mjs",
+    "data:geo": "node tools/build-zurich-geodata.mjs",
+    "data:buildings": "node tools/build-swissbuildings3d-index.mjs",
+    "data": "npm run data:osm && npm run data:areas && npm run data:trees && npm run data:terrain && npm run data:decks && npm run data:geo && npm run data:buildings",
+    "serve": "python3 -m http.server 8765 --bind 127.0.0.1",
+    "test": "node --test tests/*.cjs tests/*.mjs"
+  },
+  "devDependencies": {
+    "geotiff": "^2.1.3"
+  }
+}
